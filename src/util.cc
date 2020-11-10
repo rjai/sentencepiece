@@ -120,6 +120,18 @@ size_t EncodeUTF8(char32 c, char *output) {
 
 std::string UnicodeCharToUTF8(const char32 c) { return UnicodeTextToUTF8({c}); }
 
+constexpr char hexmap[] = {'0', '1', '2', '3', '4', '5', '6', '7',
+                           '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'};
+
+std::string hexStr(const char *data, int len) {
+  std::string s(len * 2, ' ');
+  for (int i = 0; i < len; ++i) {
+    s[2 * i]     = hexmap[(data[i] & 0xF0) >> 4];
+    s[2 * i + 1] = hexmap[(data[i] & 0x0F)];
+  }
+  return s;
+}
+
 UnicodeText UTF8ToUnicodeText(absl::string_view utf8) {
   UnicodeText uc;
   const char *begin = utf8.data();

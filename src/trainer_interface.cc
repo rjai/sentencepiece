@@ -403,8 +403,7 @@ END:
           for (size_t i = n; i < sentences_.size();
                i += trainer_spec_.num_threads()) {
             auto *s = &sentences_[i].first;
-            *s = meta_pieces_matcher.GlobalReplace(normalizer.Normalize(*s),
-                                                   kUPPBoundaryStr);
+            *s = normalizer.Normalize(meta_pieces_matcher.GlobalReplace(*s, kUPPBoundaryStr)); // cannot normalize meta pieces, but that's fine.
           }
         });
       }

@@ -54,6 +54,8 @@ uint32 GetRandomGeneratorSeed();
 // String utilities
 namespace string_util {
 
+std::string hexStr(const char *data, int len);
+
 struct string_view_hash {
   // DJB hash function.
   inline size_t operator()(const absl::string_view &sp) const {

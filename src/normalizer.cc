@@ -150,7 +150,8 @@ util::Status Normalizer::Normalize(absl::string_view input,
             norm_to_orig->push_back(consumed);
           }
         } else {
-          *normalized += data[n];
+          *normalized += string_util::hexStr(data + n, 1);
+          norm_to_orig->push_back(consumed);
           norm_to_orig->push_back(consumed);
         }
       }
@@ -184,6 +185,8 @@ util::Status Normalizer::Normalize(absl::string_view input,
   norm_to_orig->push_back(consumed);
 
   CHECK_EQ_OR_RETURN(norm_to_orig->size(), normalized->size() + 1);
+
+  // std::cerr << *normalized << std::endl;
 
   return util::OkStatus();
 }
