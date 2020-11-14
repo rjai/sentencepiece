@@ -150,9 +150,14 @@ util::Status Normalizer::Normalize(absl::string_view input,
             norm_to_orig->push_back(consumed);
           }
         } else {
+#if 0
           *normalized += string_util::hexStr(data + n, 1);
           norm_to_orig->push_back(consumed);
           norm_to_orig->push_back(consumed);
+#else
+          *normalized += data[n];
+          norm_to_orig->push_back(consumed);
+#endif
         }
       }
       // Checks whether the last character of sp is whitespace.
