@@ -110,6 +110,9 @@ ABSL_FLAG(bool, remove_extra_whitespaces,
           kDefaultNormalizerSpec.remove_extra_whitespaces(),
           "Removes leading, trailing, and "
           "duplicate internal whitespace");
+ABSL_FLAG(bool, encode_unicode_case,
+          kDefaultNormalizerSpec.encode_case(),
+          "Handles unicode case");
 ABSL_FLAG(bool, hard_vocab_limit, kDefaultTrainerSpec.hard_vocab_limit(),
           "If set to false, --vocab_size is considered as a soft limit.");
 ABSL_FLAG(bool, use_all_vocab, kDefaultTrainerSpec.use_all_vocab(),
@@ -236,6 +239,7 @@ int main(int argc, char *argv[]) {
   SetNormalizerSpecFromFlag(normalization_rule_tsv);
   SetNormalizerSpecFromFlag(add_dummy_prefix);
   SetNormalizerSpecFromFlag(remove_extra_whitespaces);
+  normalizer_spec.set_encode_case(absl::GetFlag(FLAGS_encode_unicode_case));
 
   if (!absl::GetFlag(FLAGS_denormalization_rule_tsv).empty()) {
     denormalizer_spec.set_normalization_rule_tsv(
@@ -243,6 +247,7 @@ int main(int argc, char *argv[]) {
     denormalizer_spec.set_add_dummy_prefix(false);
     denormalizer_spec.set_remove_extra_whitespaces(false);
     denormalizer_spec.set_escape_whitespaces(false);
+    denormalizer_spec.set_decode_case(absl::GetFlag(FLAGS_encode_unicode_case));
   }
 
   CHECK_OK(sentencepiece::SentencePieceTrainer::PopulateModelTypeFromString(

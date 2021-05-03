@@ -74,6 +74,9 @@ void Normalizer::Init() {
 util::Status Normalizer::Normalize(absl::string_view input,
                                    std::string *normalized,
                                    std::vector<size_t> *norm_to_orig) const {
+
+  LOG(INFO) << "Running Normalize: " << spec_->encode_case() << " " << spec_->decode_case();
+
   norm_to_orig->clear();
   normalized->clear();
 
@@ -128,7 +131,8 @@ util::Status Normalizer::Normalize(absl::string_view input,
   // With this prefix, "world" and "hello world" are converted into
   // "_world" and "_hello_world", which help the trainer to extract
   // "_world" as one symbol.
-  if (!treat_whitespace_as_suffix_ && spec_->add_dummy_prefix()) add_ws();
+  if (!treat_whitespace_as_suffix_ && spec_->add_dummy_prefix()) 
+    add_ws();
 
   bool is_prev_space = spec_->remove_extra_whitespaces();
   while (!input.empty()) {
@@ -137,28 +141,26 @@ util::Status Normalizer::Normalize(absl::string_view input,
 
     // Removes heading spaces in sentence piece,
     // if the previous sentence piece ends with whitespace.
-    while (is_prev_space && absl::ConsumePrefix(&sp, " ")) {
-    }
+    while (is_prev_space && absl::ConsumePrefix(&sp, " ")) {}
 
     if (!sp.empty()) {
-      const char *data = sp.data();
       for (size_t n = 0; n < sp.size(); ++n) {
-        if (spec_->escape_whitespaces() && data[n] == ' ') {
+        if (spec_->escape_whitespaces() && sp.data()[n] == ' ') {
           // replace ' ' with kSpaceSymbol.
           normalized->append(kSpaceSymbol.data(), kSpaceSymbol.size());
           for (size_t m = 0; m < kSpaceSymbol.size(); ++m) {
             norm_to_orig->push_back(consumed);
           }
         } else {
-          *normalized += data[n];
-          norm_to_orig->push_back(consumed);
+          normalized->append(sp.data() + n, 1);
+          norm_to_orig->push_back(consumed); 
         }
       }
       // Checks whether the last character of sp is whitespace.
       is_prev_space = absl::EndsWith(sp, " ");
     }
 
-    consumed += p.second;
+    consumed += p.second; 
     input.remove_prefix(p.second);
     if (!spec_->remove_extra_whitespaces()) {
       is_prev_space = false;

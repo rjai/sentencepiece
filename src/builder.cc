@@ -475,6 +475,48 @@ util::Status Builder::BuildNmtNFKC_CFMap(CharsMap *chars_map) {
   return util::OkStatus();
 }
 
+util::Status Builder::BuildUncaserMap(Builder::CharsMap *chars_map) {
+#ifdef ENABLE_NFKC_COMPILE
+  LOG(INFO) << "Running BuildUncaserMap";
+
+  constexpr char32 ucMarker = (char32)'U';
+  constexpr int kMaxUnicode = 0x10FFFF;
+  for (char32 cp = 1; cp <= kMaxUnicode; ++cp) {
+    if (!U_IS_UNICODE_CHAR(cp)) {
+      continue;
+    }
+    const char32 trg = u_foldCase(cp, U_FOLD_CASE_DEFAULT);
+    if (trg != cp) 
+      (*chars_map)[{cp}] = {ucMarker, trg};
+  }
+
+  RETURN_IF_ERROR(RemoveRedundantMap(chars_map));
+#endif
+
+  return util::OkStatus();
+}
+
+util::Status Builder::BuildRecaserMap(Builder::CharsMap *chars_map) {
+#ifdef ENABLE_NFKC_COMPILE
+  LOG(INFO) << "Running BuildRecaserMap";
+
+  constexpr char32 ucMarker = (char32)'U';
+  constexpr int kMaxUnicode = 0x10FFFF;
+  for (char32 cp = 1; cp <= kMaxUnicode; ++cp) {
+    if (!U_IS_UNICODE_CHAR(cp)) {
+      continue;
+    }
+    const char32 trg = u_foldCase(cp, U_FOLD_CASE_DEFAULT);
+    if (trg != cp) 
+      (*chars_map)[{ucMarker, trg}] = {cp};
+  }
+
+  RETURN_IF_ERROR(RemoveRedundantMap(chars_map));
+#endif
+
+  return util::OkStatus();
+}
+
 // static
 util::Status Builder::LoadCharsMap(absl::string_view filename,
                                    CharsMap *chars_map) {
