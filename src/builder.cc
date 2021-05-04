@@ -518,6 +518,23 @@ util::Status Builder::BuildRecaserMap(Builder::CharsMap *chars_map) {
 }
 
 // static
+util::Status Builder::ComposeCharsMaps(const Builder::CharsMap &outer_chars_map, Builder::CharsMap *chars_map, bool add_rest) {
+  for(auto& cp : *chars_map) {
+    auto found = outer_chars_map.find(cp.second);
+    if(found != outer_chars_map.end())
+      cp.second = found->second;
+  }
+  if(add_rest) {
+    for(auto& cp : outer_chars_map) {
+      auto found = chars_map->find(cp.first);
+      if(found == chars_map->end())
+        (*chars_map)[cp.first] = cp.second;
+    }
+  }
+  return util::OkStatus();
+}
+
+// static
 util::Status Builder::LoadCharsMap(absl::string_view filename,
                                    CharsMap *chars_map) {
   LOG(INFO) << "Loading mapping file: " << filename.data();

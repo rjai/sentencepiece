@@ -107,6 +107,9 @@ class Builder {
   static util::Status BuildUncaserMap(CharsMap *chars_map);
   static util::Status BuildRecaserMap(CharsMap *chars_map);
 
+  // Create composition outer_chars_map(chars_map) into `chars_map`.
+  static util::Status ComposeCharsMaps(const CharsMap &outer_chars_map, CharsMap *chars_map, bool add_rest);
+
   // Builds Chars map save in `filename`.
   // Format:
   // src_uchar1 src_uchar2 ... <tab> trg_uchar1 trg_uchar2...

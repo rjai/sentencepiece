@@ -224,6 +224,20 @@ util::Status SentencePieceTrainer::PopulateNormalizerSpec(
     }
   }
 
+  if(normalizer_spec->encode_case()) {
+    normalizer::Builder::CharsMap chars_map;
+    if(!normalizer_spec->precompiled_charsmap().empty())
+      normalizer::Builder::DecompileCharsMap(normalizer_spec->precompiled_charsmap(), &chars_map);
+
+    normalizer::Builder::CharsMap uncaser;
+    std::string precompiledUncaser;
+    RETURN_IF_ERROR(normalizer::Builder::GetPrecompiledCharsMap("case_uncaser", &precompiledUncaser));
+    RETURN_IF_ERROR(normalizer::Builder::DecompileCharsMap(absl::string_view(precompiledUncaser), &uncaser));
+    
+    RETURN_IF_ERROR(normalizer::Builder::ComposeCharsMaps(uncaser, &chars_map, /*add_rest=*/true));
+    RETURN_IF_ERROR(normalizer::Builder::CompileCharsMap(chars_map, normalizer_spec->mutable_precompiled_charsmap()));
+  }
+
   return util::OkStatus();
 }
 

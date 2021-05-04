@@ -47,6 +47,7 @@ Normalizer::~Normalizer() {}
 
 void Normalizer::Init() {
   absl::string_view index = spec_->precompiled_charsmap();
+
   if (index.empty()) {
     LOG(INFO) << "precompiled_charsmap is empty. use identity normalization.";
   } else {
@@ -182,6 +183,8 @@ util::Status Normalizer::Normalize(absl::string_view input,
 
   // Adds a space symbol as a suffix (default is false)
   if (treat_whitespace_as_suffix_ && spec_->add_dummy_prefix()) add_ws();
+
+  LOG(INFO) << *normalized;
 
   norm_to_orig->push_back(consumed);
 
