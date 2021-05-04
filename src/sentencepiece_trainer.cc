@@ -224,6 +224,7 @@ util::Status SentencePieceTrainer::PopulateNormalizerSpec(
     }
   }
 
+  // if we encode casing we need to merge with the existing normalizer
   if(normalizer_spec->encode_case()) {
     normalizer::Builder::CharsMap chars_map;
     if(!normalizer_spec->precompiled_charsmap().empty())

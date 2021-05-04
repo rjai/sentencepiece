@@ -480,15 +480,23 @@ util::Status Builder::BuildUncaserMap(Builder::CharsMap *chars_map) {
   LOG(INFO) << "Running BuildUncaserMap";
 
   constexpr char32 ucMarker = (char32)'U';
+  constexpr char32 ncMarker = (char32)'P';
+  
   constexpr int kMaxUnicode = 0x10FFFF;
   for (char32 cp = 1; cp <= kMaxUnicode; ++cp) {
     if (!U_IS_UNICODE_CHAR(cp)) {
       continue;
     }
+
+    if(u_ispunct(cp))
+      (*chars_map)[{cp}] = {ncMarker, cp};
+
     const char32 trg = u_foldCase(cp, U_FOLD_CASE_DEFAULT);
     if (trg != cp) 
       (*chars_map)[{cp}] = {ucMarker, trg};
   }
+
+  LOG(INFO) << "Character map size for Uncaser: " << chars_map->size();
 
   RETURN_IF_ERROR(RemoveRedundantMap(chars_map));
 #endif

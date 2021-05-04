@@ -24,6 +24,7 @@
 #include "third_party/absl/strings/strip.h"
 #include "third_party/darts_clone/darts.h"
 #include "util.h"
+#include "case_encoder.h"
 
 namespace sentencepiece {
 namespace normalizer {
@@ -76,7 +77,9 @@ util::Status Normalizer::Normalize(absl::string_view input,
                                    std::string *normalized,
                                    std::vector<size_t> *norm_to_orig) const {
 
-  LOG(INFO) << "Running Normalize: " << spec_->encode_case() << " " << spec_->decode_case();
+  // LOG(INFO) << "Running Normalize: " << spec_->encode_case() << " " << spec_->decode_case();
+
+  std::string inputStr(input.data(), input.size());
 
   norm_to_orig->clear();
   normalized->clear();
@@ -135,6 +138,8 @@ util::Status Normalizer::Normalize(absl::string_view input,
   if (!treat_whitespace_as_suffix_ && spec_->add_dummy_prefix()) 
     add_ws();
 
+  std::unique_ptr<CaseEncoder> case_encoder = CaseEncoder::Create(spec_->encode_case(), spec_->decode_case(), normalized, norm_to_orig);
+
   bool is_prev_space = spec_->remove_extra_whitespaces();
   while (!input.empty()) {
     auto p = NormalizePrefix(input);
@@ -147,16 +152,23 @@ util::Status Normalizer::Normalize(absl::string_view input,
     if (!sp.empty()) {
       for (size_t n = 0; n < sp.size(); ++n) {
         if (spec_->escape_whitespaces() && sp.data()[n] == ' ') {
-          // replace ' ' with kSpaceSymbol.
-          normalized->append(kSpaceSymbol.data(), kSpaceSymbol.size());
-          for (size_t m = 0; m < kSpaceSymbol.size(); ++m) {
-            norm_to_orig->push_back(consumed);
+          bool append = case_encoder->encode(sp, n, consumed);
+          if(append) {
+            // replace ' ' with kSpaceSymbol.
+            normalized->append(kSpaceSymbol.data(), kSpaceSymbol.size());
+            for (size_t m = 0; m < kSpaceSymbol.size(); ++m) {
+              norm_to_orig->push_back(consumed);
+            }
           }
         } else {
-          normalized->append(sp.data() + n, 1);
-          norm_to_orig->push_back(consumed); 
+          bool append = case_encoder->encode(sp.data(), n, consumed);
+          if(append) {
+            normalized->append(sp.data() + n, 1);
+            norm_to_orig->push_back(consumed); 
+          }
         }
       }
+
       // Checks whether the last character of sp is whitespace.
       is_prev_space = absl::EndsWith(sp, " ");
     }
@@ -183,8 +195,6 @@ util::Status Normalizer::Normalize(absl::string_view input,
 
   // Adds a space symbol as a suffix (default is false)
   if (treat_whitespace_as_suffix_ && spec_->add_dummy_prefix()) add_ws();
-
-  LOG(INFO) << *normalized;
 
   norm_to_orig->push_back(consumed);
 
