@@ -29,13 +29,29 @@ namespace sentencepiece {
 namespace normalizer {
 
 class CaseEncoder {
+protected:
+  typedef std::function<std::pair<absl::string_view, int>(absl::string_view)> Normalizer;
+  Normalizer normalizer_;
+
 public:
   virtual ~CaseEncoder() {}
+  
+  virtual std::pair<absl::string_view, int> normalizePrefix(absl::string_view input) {
+    auto p = normalizer_(input);
+    int sp_consumed = p.second;
+    push(p, /*last=*/input.size() == sp_consumed);
+    return p;
+  }
+
   virtual void push(const std::pair<absl::string_view, int>& p, bool last) = 0;
   virtual bool empty() = 0;
   virtual std::pair<absl::string_view, int> pop() = 0;
 
   static std::unique_ptr<CaseEncoder> Create(bool, bool);
+
+  virtual void setNormalizer(Normalizer normalizer) {
+    normalizer_ = normalizer;
+  }
 };
 
 class IdentityCaseEncoder : public CaseEncoder {
@@ -45,6 +61,7 @@ private:
 
 public:
   IdentityCaseEncoder() {}
+  
   void push(const std::pair<absl::string_view, int>& p, bool /*last*/) {
     p_ = p;
     empty_ = false;

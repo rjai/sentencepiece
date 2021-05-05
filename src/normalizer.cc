@@ -135,17 +135,20 @@ util::Status Normalizer::Normalize(absl::string_view input,
     add_ws();
 
   std::unique_ptr<CaseEncoder> case_encoder = CaseEncoder::Create(spec_->encode_case(), spec_->decode_case());
+  
+  case_encoder->setNormalizer(
+    [this](absl::string_view input) { 
+      return NormalizePrefix(input); 
+    }
+  );
 
   ////////////////////////////////////////////////////////////////////////////////////
 
   bool is_prev_space = spec_->remove_extra_whitespaces();
   while (!input.empty()) {
-    // auto p = case_encoder->normalizePrefix(input);
-    auto p = NormalizePrefix(input);
-    int sp_consumed = p.second;
 
-    case_encoder->push(p, /*last=*/input.size() == sp_consumed);
-
+    auto p = case_encoder->normalizePrefix(input);
+    
     while(!case_encoder->empty()) {
       absl::string_view sp = case_encoder->pop().first;
 
@@ -176,8 +179,8 @@ util::Status Normalizer::Normalize(absl::string_view input,
       }
     }
 
-    consumed += sp_consumed; 
-    input.remove_prefix(sp_consumed);
+    consumed += p.second; 
+    input.remove_prefix(p.second);
   }
 
   ////////////////////////////////////////////////////////////////////////////////////
