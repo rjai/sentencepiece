@@ -19,7 +19,7 @@
 #include <set>
 #include <string>
 #include <utility>
-#include <vector>
+#include <deque>
 
 #include "common.h"
 #include "third_party/absl/strings/string_view.h"
@@ -31,125 +31,141 @@ namespace normalizer {
 class CaseEncoder {
 public:
   virtual ~CaseEncoder() {}
-  virtual bool encode(const absl::string_view& sp, int n, int src, int consumed) = 0;
+  virtual void push(const std::pair<absl::string_view, int>& p, bool last) = 0;
+  virtual bool empty() = 0;
+  virtual std::pair<absl::string_view, int> pop() = 0;
 
-  static std::unique_ptr<CaseEncoder> Create(bool, bool, absl::string_view* /*input*/, std::string* /*normalized*/, std::vector<size_t>* /*norm_to_orig*/);
+  static std::unique_ptr<CaseEncoder> Create(bool, bool);
 };
 
 class IdentityCaseEncoder : public CaseEncoder {
+private:
+  std::pair<absl::string_view, int> p_;
+  bool empty_{true};
+
 public:
   IdentityCaseEncoder() {}
-  bool encode(const absl::string_view& sp, int n, int src, int consumed) {
-    return true;
+  void push(const std::pair<absl::string_view, int>& p, bool /*last*/) {
+    p_ = p;
+    empty_ = false;
+  }
+
+  bool empty() {
+    return empty_;
+  }
+
+  std::pair<absl::string_view, int> pop() {
+    empty_ = true;
+    return p_;
   }
 };
 
 class UpperCaseEncoder : public CaseEncoder {
-private:
-  char* last_u_{nullptr};
-  size_t last_u_dist_{0};
-  std::string* normalized_;
-  std::vector<size_t> *norm_to_orig_;
+  std::vector<std::string> buffers_;
+  std::deque<std::pair<absl::string_view, int>> pieces_;
+  bool flush_{false};
+  size_t countU_{0};
+
+  void fixUs() {
+    if(countU_ == 1) {
+      auto sp = pieces_.front().first;
+      buffers_.emplace_back(sp.data(), sp.size());
+      buffers_.back()[0] = 'T';
+      pieces_.front().first = absl::string_view(buffers_.back());
+    } else if(countU_ > 1) {
+      for(int i = 1; i < countU_; ++i) {
+        auto sp = pieces_[i].first;
+        pieces_[i].first = absl::string_view(sp.data() + 1, sp.size() - 1);
+      }
+    }
+  }
 
 public:
-  UpperCaseEncoder(std::string* normalized, std::vector<size_t> *norm_to_orig)
-  : normalized_(normalized), norm_to_orig_(norm_to_orig) {}
+  UpperCaseEncoder() {}
 
-  bool encode(const absl::string_view& sp, int n, int src, int consumed) {
-    if(n != 0)
-      return true;
-
-    char curChar = sp.data()[0];
-    if(curChar == ' ') {
-      if(last_u_) {
-        if(last_u_dist_ == 1)
-          *last_u_ = 'T';
-        last_u_ = nullptr;
-        last_u_dist_ = 0;
-      }
-      return true;
-    }
-
-    if(!last_u_ && curChar == 'U') {
-      last_u_ = &(*normalized_)[0] + normalized_->size();
-      last_u_dist_++;
-    } else if(last_u_ && curChar == 'U') { // uppercase sequence, skip over U
-      last_u_dist_++;
-      return false;
-    } else if (last_u_ && curChar != 'U' && last_u_dist_ == 1) { // single uppercase letter
-      *last_u_ = 'T';
-      last_u_ = nullptr;
-      last_u_dist_ = 0;
-    } else if (last_u_ && (curChar != 'U' && curChar != 'P') && last_u_dist_ > 1) { 
-      // we had a longer uppercase sequence, hence need to insert 'L'
-      normalized_->append(1, 'L');
-      norm_to_orig_->push_back(consumed); 
-
-      last_u_ = nullptr;
-      last_u_dist_ = 0;
+  void push(const std::pair<absl::string_view, int>& p, bool last) {
+    auto sp = p.first;
+    if(sp.data()[0] == 'U') {
+      pieces_.push_back(p);
+      countU_++;
+      flush_ = false;
+    } else if(sp.data()[0] == 'P') {
+      fixUs();
+      pieces_.push_back({absl::string_view(sp.data() + 1, sp.size() - 1), p.second});
+      countU_ = 0;
+      flush_ = true;
+    } else if(sp.data()[0] == ' ') {
+      fixUs();
+      pieces_.push_back(p);
+      countU_ = 0;
+      flush_ = true;
     } else {
-      last_u_ = nullptr;
-      last_u_dist_ = 0;
+      fixUs();
+      if(countU_ > 1) {
+        buffers_.emplace_back("L");
+        buffers_.back().append(p.first.data(), p.first.size());
+        pieces_.push_back({buffers_.back(), p.second});
+      } else {
+        pieces_.push_back(p);
+      }
+      countU_ = 0;
+      flush_ = true;
     }
 
-    if(curChar == 'P') {
-      last_u_ = nullptr;
-      last_u_dist_ = 0;
-      return false;
-    }
+    if(last)
+      flush_ = true; // flush it all out
+  }
 
-    return true;
+  bool empty() {
+    return pieces_.empty() || !flush_;
+  }
+
+  std::pair<absl::string_view, int> pop() {
+    auto p = pieces_.front();
+    pieces_.pop_front();
+    return p;
   }
 };
 
 class UpperCaseDecoder : public CaseEncoder {
-private:
-  char* last_u_{nullptr};
-  size_t last_u_dist_{0};
-  std::string* normalized_;
-  std::vector<size_t> *norm_to_orig_;
-
-  std::string buffer_;
-  absl::string_view* input_;
+  std::vector<std::string> buffers_;
+  std::deque<std::pair<absl::string_view, int>> pieces_;
+  bool flush_{false};
 
 public:
-  UpperCaseDecoder(absl::string_view* input, std::string* normalized, std::vector<size_t> *norm_to_orig)
-  : normalized_(normalized), norm_to_orig_(norm_to_orig), buffer_(input->data(), input->size()), input_(input) {
-    *input = absl::string_view(buffer_);
+  UpperCaseDecoder() {}
 
-  // if(buffer_[0] == 'T')
-  //   buffer_[0] = 'U';
+  void push(const std::pair<absl::string_view, int>& p, bool last) {
+    auto sp = p.first;
+
+    std::cerr << p.first << std::endl;
+    pieces_.push_back(p);
+    flush_ = true;
+    
+    if(last)
+      flush_ = true; // flush it all out
   }
 
-  bool encode(const absl::string_view& sp, int n, int src, int consumed) {
-    if(n != 0)
-      return true;
+  bool empty() {
+    return pieces_.empty() || !flush_;
+  }
 
-    std::cerr << "B: " << n << " " << src << " " << consumed << " " << std::string(input_->data(), input_->size()) << std::endl;
-    
-    // if(consumed + src < buffer_.size() && buffer_[consumed + src] == 'T') {
-    //   buffer_[consumed + src] = 'U';
-    // } 
-    
-    if(consumed + src < buffer_.size() && input_->data()[0] == 'U') {
-       buffer_[consumed + src - 1] = 'U';
-       *input_ = absl::string_view(input_->data() - 1, input_->size() + 1);
-    }
-
-    std::cerr << "A: " << n << " " << src << " " << consumed << " " << std::string(input_->data(), input_->size()) << std::endl;
-    return true;
+  std::pair<absl::string_view, int> pop() {
+    auto p = pieces_.front();
+    pieces_.pop_front();
+    return p;
   }
 };
 
-std::unique_ptr<CaseEncoder> CaseEncoder::Create(bool encodeCase, bool decodeCase, absl::string_view* input, std::string* normalized, std::vector<size_t>* norm_to_orig) {
+std::unique_ptr<CaseEncoder> CaseEncoder::Create(bool encodeCase, bool decodeCase) {
+  // LOG(INFO) << encodeCase << " " << decodeCase;
   if(encodeCase && decodeCase) {
     LOG(ERROR) << "Cannot set both encodeCase=true and decodeCase=true";
     return nullptr;
   } else if(encodeCase) {
-    return std::unique_ptr<CaseEncoder>(new UpperCaseEncoder(normalized, norm_to_orig));
+    return std::unique_ptr<CaseEncoder>(new UpperCaseEncoder());
   } else if(decodeCase) {
-    return std::unique_ptr<CaseEncoder>(new IdentityCaseEncoder());
-    // return std::unique_ptr<CaseEncoder>(new UpperCaseDecoder(input, normalized, norm_to_orig));
+    return std::unique_ptr<CaseEncoder>(new UpperCaseDecoder());
   } else {
     return std::unique_ptr<CaseEncoder>(new IdentityCaseEncoder());
   }
