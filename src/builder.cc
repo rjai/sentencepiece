@@ -509,14 +509,19 @@ util::Status Builder::BuildRecaserMap(Builder::CharsMap *chars_map) {
   LOG(INFO) << "Running BuildRecaserMap";
 
   constexpr char32 ucMarker = (char32)'U';
+  constexpr char32 tcMarker = (char32)'T';
   constexpr int kMaxUnicode = 0x10FFFF;
   for (char32 cp = 1; cp <= kMaxUnicode; ++cp) {
     if (!U_IS_UNICODE_CHAR(cp)) {
       continue;
     }
     const char32 trg = u_foldCase(cp, U_FOLD_CASE_DEFAULT);
-    if (trg != cp) 
-      (*chars_map)[{ucMarker, trg}] = {cp};
+    if (trg != cp) {
+      if(chars_map->find({ucMarker, trg}) == chars_map->end())
+        (*chars_map)[{ucMarker, trg}] = {cp};
+      if(chars_map->find({tcMarker, trg}) == chars_map->end())
+        (*chars_map)[{tcMarker, trg}] = {cp};
+    }
   }
 
   RETURN_IF_ERROR(RemoveRedundantMap(chars_map));

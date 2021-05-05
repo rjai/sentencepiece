@@ -170,6 +170,7 @@ inline std::string PrintProto(const NormalizerSpec &message,
   PRINT_PARAM(escape_whitespaces);
   PRINT_PARAM(normalization_rule_tsv);
   PRINT_PARAM(encode_case);
+  PRINT_PARAM(decode_case);
 
   os << "}\n";
 

@@ -241,9 +241,10 @@ int main(int argc, char *argv[]) {
   SetNormalizerSpecFromFlag(remove_extra_whitespaces);
   normalizer_spec.set_encode_case(absl::GetFlag(FLAGS_encode_unicode_case));
 
-  if (!absl::GetFlag(FLAGS_denormalization_rule_tsv).empty()) {
-    denormalizer_spec.set_normalization_rule_tsv(
-        absl::GetFlag(FLAGS_denormalization_rule_tsv));
+  if (!absl::GetFlag(FLAGS_denormalization_rule_tsv).empty() || absl::GetFlag(FLAGS_encode_unicode_case)) {
+    if(!absl::GetFlag(FLAGS_denormalization_rule_tsv).empty())
+      denormalizer_spec.set_normalization_rule_tsv(absl::GetFlag(FLAGS_denormalization_rule_tsv));
+      
     denormalizer_spec.set_add_dummy_prefix(false);
     denormalizer_spec.set_remove_extra_whitespaces(false);
     denormalizer_spec.set_escape_whitespaces(false);

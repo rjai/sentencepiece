@@ -77,9 +77,10 @@ util::Status Normalizer::Normalize(absl::string_view input,
                                    std::string *normalized,
                                    std::vector<size_t> *norm_to_orig) const {
 
-  // LOG(INFO) << "Running Normalize: " << spec_->encode_case() << " " << spec_->decode_case();
+  std::string buffer(input.data(), input.size());
+  input = absl::string_view(buffer);
 
-  std::string inputStr(input.data(), input.size());
+  std::cerr << "In: " << buffer << std::endl;
 
   norm_to_orig->clear();
   normalized->clear();
@@ -138,10 +139,14 @@ util::Status Normalizer::Normalize(absl::string_view input,
   if (!treat_whitespace_as_suffix_ && spec_->add_dummy_prefix()) 
     add_ws();
 
-  std::unique_ptr<CaseEncoder> case_encoder = CaseEncoder::Create(spec_->encode_case(), spec_->decode_case(), normalized, norm_to_orig);
+  std::unique_ptr<CaseEncoder> case_encoder = CaseEncoder::Create(spec_->encode_case(), spec_->decode_case(), &input, normalized, norm_to_orig);
+  int correction = 0;
+  bool shifted = false;
 
   bool is_prev_space = spec_->remove_extra_whitespaces();
   while (!input.empty()) {
+    correction = shifted ? 1 : 0;
+
     auto p = NormalizePrefix(input);
     absl::string_view sp = p.first;
 
@@ -152,7 +157,7 @@ util::Status Normalizer::Normalize(absl::string_view input,
     if (!sp.empty()) {
       for (size_t n = 0; n < sp.size(); ++n) {
         if (spec_->escape_whitespaces() && sp.data()[n] == ' ') {
-          bool append = case_encoder->encode(sp, n, consumed);
+          bool append = case_encoder->encode(sp, n, p.second, consumed);
           if(append) {
             // replace ' ' with kSpaceSymbol.
             normalized->append(kSpaceSymbol.data(), kSpaceSymbol.size());
@@ -161,7 +166,25 @@ util::Status Normalizer::Normalize(absl::string_view input,
             }
           }
         } else {
-          bool append = case_encoder->encode(sp.data(), n, consumed);
+          if(n == 0) {
+            if(input.data()[0] == 'U' && p.second > 1) {
+              int index = (input.data() + p.second - 1) - buffer.data();
+              buffer[index] = 'U';
+              std::cerr << std::string(sp.data(), sp.size()) << " " << p.second << " -> " << (buffer.data() + index) << std::endl;
+              input = absl::string_view(input.data() - 1, input.size() + 1);
+              shifted = true;
+            } else if(input.data()[0] == 'U' && p.second == 1) {
+              shifted = false;
+              continue;
+            } else if(input.data()[0] == 'L' && p.second == 1) {
+              shifted = false;
+              continue;
+            } else {
+              shifted = false;
+            }
+          }
+
+          bool append = case_encoder->encode(sp, n, p.second, consumed);
           if(append) {
             normalized->append(sp.data() + n, 1);
             norm_to_orig->push_back(consumed); 
@@ -173,7 +196,8 @@ util::Status Normalizer::Normalize(absl::string_view input,
       is_prev_space = absl::EndsWith(sp, " ");
     }
 
-    consumed += p.second; 
+    consumed += p.second - correction; 
+    std::cerr << "consumed: " << consumed << " -> " << (buffer.data() + consumed) << std::endl;
     input.remove_prefix(p.second);
     if (!spec_->remove_extra_whitespaces()) {
       is_prev_space = false;
