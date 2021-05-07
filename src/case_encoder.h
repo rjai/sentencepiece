@@ -153,19 +153,6 @@ public:
   }
 };
 
-std::unique_ptr<CaseEncoder> CaseEncoder::Create(bool encodeCase, bool decodeCase) {
-  if(encodeCase && decodeCase) {
-    LOG(ERROR) << "Cannot set both encodeCase=true and decodeCase=true";
-    return nullptr;
-  } else if(encodeCase) {
-    return std::unique_ptr<CaseEncoder>(new UpperCaseEncoder());
-  } else if(decodeCase) {
-    return std::unique_ptr<CaseEncoder>(new UpperCaseDecoder());
-  } else {
-    return std::unique_ptr<CaseEncoder>(new CaseEncoder());
-  }
-}
-
 }  // namespace normalizer
 }  // namespace sentencepiece
 #endif  // NORMALIZER_CASE_ENCODER_H_
