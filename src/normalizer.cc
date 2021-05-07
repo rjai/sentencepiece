@@ -131,17 +131,23 @@ util::Status Normalizer::Normalize(absl::string_view input,
   // "_world" as one symbol.
   if (!treat_whitespace_as_suffix_ && spec_->add_dummy_prefix()) add_ws();
 
+  typedef std::function<std::pair<absl::string_view, int>(absl::string_view)> NormalizePrefixFn;
+  NormalizePrefixFn normalizePrefixFn = [this](absl::string_view input) { 
+    return NormalizePrefix(input); 
+  };
+
   std::unique_ptr<CaseEncoder> case_encoder = CaseEncoder::Create(spec_->encode_case(), spec_->decode_case());
-  case_encoder->setNormalizer(
-    [this](absl::string_view input) {
-      return NormalizePrefix(input);
-    }
-  );
+  if(case_encoder) {
+    case_encoder->setNormalizer(normalizePrefixFn);
+    normalizePrefixFn = [&case_encoder](absl::string_view input) { 
+      return case_encoder->normalizePrefix(input); 
+    };
+  }
 
   bool is_prev_space = spec_->remove_extra_whitespaces();
   while (!input.empty()) {
-    auto p = case_encoder->normalizePrefix(input);
-    auto sp = p.first;
+    auto p = normalizePrefixFn(input);
+    absl::string_view sp = p.first;
 
     // Removes heading spaces in sentence piece,
     // if the previous sentence piece ends with whitespace.

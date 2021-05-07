@@ -26,7 +26,7 @@ std::unique_ptr<CaseEncoder> CaseEncoder::Create(bool encodeCase, bool decodeCas
   } else if(decodeCase) {
     return std::unique_ptr<CaseEncoder>(new UpperCaseDecoder());
   } else {
-    return std::unique_ptr<CaseEncoder>(new CaseEncoder());
+    return nullptr;
   }
 }
 
