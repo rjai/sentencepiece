@@ -148,38 +148,34 @@ util::Status Normalizer::Normalize(absl::string_view input,
   while (!input.empty()) {
 
     auto p = case_encoder->normalizePrefix(input);
-    case_encoder->push(p, input.size() == p.second);
-    
-    while(!case_encoder->empty()) {
-      absl::string_view sp = case_encoder->pop().first;
+    auto sp = p.first;
 
-      // Removes heading spaces in sentence piece,
-      // if the previous sentence piece ends with whitespace.
-      while (is_prev_space && absl::ConsumePrefix(&sp, " ")) {}
+    // Removes heading spaces in sentence piece,
+    // if the previous sentence piece ends with whitespace.
+    while (is_prev_space && absl::ConsumePrefix(&sp, " ")) {}
 
-      if (!sp.empty()) {
-        for (size_t n = 0; n < sp.size(); ++n) {
-          if (spec_->escape_whitespaces() && sp.data()[n] == ' ') {
-            // replace ' ' with kSpaceSymbol.
-            normalized->append(kSpaceSymbol.data(), kSpaceSymbol.size());
-            for (size_t m = 0; m < kSpaceSymbol.size(); ++m) {
-              norm_to_orig->push_back(consumed);
-            }
-          } else {
-              normalized->append(sp.data() + n, 1);
-              norm_to_orig->push_back(consumed); 
+    if (!sp.empty()) {
+      for (size_t n = 0; n < sp.size(); ++n) {
+        if (spec_->escape_whitespaces() && sp.data()[n] == ' ') {
+          // replace ' ' with kSpaceSymbol.
+          normalized->append(kSpaceSymbol.data(), kSpaceSymbol.size());
+          for (size_t m = 0; m < kSpaceSymbol.size(); ++m) {
+            norm_to_orig->push_back(consumed);
           }
+        } else {
+          normalized->append(sp.data() + n, 1);
+          norm_to_orig->push_back(consumed); 
         }
-
-        // Checks whether the last character of sp is whitespace.
-        is_prev_space = absl::EndsWith(sp, " ");
       }
 
-      if (!spec_->remove_extra_whitespaces()) {
-        is_prev_space = false;
-      }
+      // Checks whether the last character of sp is whitespace.
+      is_prev_space = absl::EndsWith(sp, " ");
     }
 
+    if (!spec_->remove_extra_whitespaces()) {
+      is_prev_space = false;
+    }
+    
     consumed += p.second; 
     input.remove_prefix(p.second);
   }

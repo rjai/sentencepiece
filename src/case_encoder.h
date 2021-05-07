@@ -28,6 +28,11 @@
 namespace sentencepiece {
 namespace normalizer {
 
+constexpr char cUppercase = 'U';
+constexpr char cTitlecase = 'T';
+constexpr char cLowercase = 'L';
+constexpr char cPunctuation = 'P';
+
 class CaseEncoder {
 protected:
   typedef std::function<std::pair<absl::string_view, int>(absl::string_view)> Normalizer;
@@ -40,104 +45,61 @@ public:
     return normalizer_(input);
   }
 
-  virtual void push(const std::pair<absl::string_view, int>& p, bool last) = 0;
-  virtual bool empty() = 0;
-  virtual std::pair<absl::string_view, int> pop() = 0;
-
-  static std::unique_ptr<CaseEncoder> Create(bool, bool);
-
   virtual void setNormalizer(Normalizer normalizer) {
     normalizer_ = normalizer;
   }
-};
 
-class IdentityCaseEncoder : public CaseEncoder {
-private:
-  std::pair<absl::string_view, int> p_;
-  bool empty_{true};
-
-public:
-  IdentityCaseEncoder() {}
-  
-  void push(const std::pair<absl::string_view, int>& p, bool /*last*/) {
-    p_ = p;
-    empty_ = false;
-  }
-
-  bool empty() {
-    return empty_;
-  }
-
-  std::pair<absl::string_view, int> pop() {
-    empty_ = true;
-    return p_;
-  }
+  static std::unique_ptr<CaseEncoder> Create(bool, bool);
 };
 
 class UpperCaseEncoder : public CaseEncoder {
-  std::vector<std::string> buffers_;
-  std::deque<std::pair<absl::string_view, int>> pieces_;
-  bool flush_{false};
-  size_t countU_{0};
-
-  void fixUs() {
-    if(countU_ == 1) {
-      auto sp = pieces_.front().first;
-      buffers_.emplace_back(sp.data(), sp.size());
-      buffers_.back()[0] = 'T';
-      pieces_.front().first = absl::string_view(buffers_.back());
-    } else if(countU_ > 1) {
-      for(int i = 1; i < countU_; ++i) {
-        auto sp = pieces_[i].first;
-        pieces_[i].first = absl::string_view(sp.data() + 1, sp.size() - 1);
-      }
-    }
-  }
+private:
+  std::string buffer_;
+  int state_ = 0;
 
 public:
   UpperCaseEncoder() {}
 
-  void push(const std::pair<absl::string_view, int>& p, bool last) {
+  std::pair<absl::string_view, int> normalizePrefix(absl::string_view input) {
+    auto p = CaseEncoder::normalizePrefix(input);
     auto sp = p.first;
-    if(sp.data()[0] == 'U') {
-      pieces_.push_back(p);
-      countU_++;
-      flush_ = false;
-    } else if(sp.data()[0] == 'P') {
-      fixUs();
-      pieces_.push_back({absl::string_view(sp.data() + 1, sp.size() - 1), p.second});
-      countU_ = 0;
-      flush_ = true;
-    } else if(sp.data()[0] == ' ') {
-      fixUs();
-      pieces_.push_back(p);
-      countU_ = 0;
-      flush_ = true;
+    int consumed = p.second;
+
+    bool last = input.size() == (size_t)consumed;
+    decltype(p) ret;
+
+    if(state_ == 0)
+      buffer_.clear();
+
+    if(sp[0] == cUppercase) {
+      if(state_ == 0) {
+        buffer_.append(sp.data(), sp.size());
+        buffer_[0] = cTitlecase;
+        state_ = 1;
+        ret = {{nullptr, 0}, consumed};
+      } else if(state_ == 1 || state_ == 2) {
+        buffer_.append(sp.data() + 1, sp.size() - 1);
+        buffer_[0] = cUppercase;
+        state_ = 2;
+        ret = {{nullptr, 0}, consumed};
+      }  
+      if(last)
+        ret.first = absl::string_view(buffer_);
     } else {
-      fixUs();
-      if(countU_ > 1) {
-        buffers_.emplace_back("L");
-        buffers_.back().append(p.first.data(), p.first.size());
-        pieces_.push_back({buffers_.back(), p.second});
-      } else {
-        pieces_.push_back(p);
+      if(sp[0] == cPunctuation)
+        p.first.remove_prefix(1);
+      else if(state_ == 2)
+        buffer_.append(1, cLowercase);
+
+      if(!buffer_.empty()) {
+        buffer_.append(p.first.data(), p.first.size());
+        p.first = absl::string_view(buffer_);
       }
-      countU_ = 0;
-      flush_ = true;
+      state_ = 0;
+      ret = p;
     }
 
-    if(last)
-      flush_ = true; // flush it all out
-  }
-
-  bool empty() {
-    return pieces_.empty() || !flush_;
-  }
-
-  std::pair<absl::string_view, int> pop() {
-    auto p = pieces_.front();
-    pieces_.pop_front();
-    return p;
+    return ret;
   }
 };
 
@@ -145,9 +107,6 @@ class UpperCaseDecoder : public CaseEncoder {
 private:
   std::unique_ptr<std::string> buffer_;
   absl::string_view input_;
-
-  std::pair<absl::string_view, int> p_;
-  bool empty_{true};
 
   int state_ = 0;
 
@@ -161,49 +120,36 @@ public:
     }
 
     auto p = CaseEncoder::normalizePrefix(input_);
+    int consumed = p.second;
 
-    if(input_[0] == 'U') {
+    if(input_[0] == cUppercase) {
       if(state_ == 0) { 
-        input_.remove_prefix(p.second - 1);
-        const_cast<char&>(input_[0]) = 'U';
+        input_.remove_prefix(consumed - 1);
+        const_cast<char&>(input_[0]) = cUppercase;
         state_ = 1;
       } else if(state_ == 1) {
-        if(p.second > 1) {
-          input_.remove_prefix(p.second - 1);
-          const_cast<char&>(input_[0]) = 'U';
-          p.second = p.second - 1;
+        if(consumed > 1) {
+          input_.remove_prefix(consumed - 1);
+          const_cast<char&>(input_[0]) = cUppercase;
+          p.second = consumed - 1;
           state_ = 1;
         } else {
-          input_.remove_prefix(p.second);
+          input_.remove_prefix(consumed);
           p.first.remove_prefix(1);
           p.second = 0;
           state_ = 0;
         }
       }
-    } else if(input_[0] == 'L') {
-      input_.remove_prefix(p.second);
+    } else if(input_[0] == cLowercase) {
+      input_.remove_prefix(consumed);
       p.first.remove_prefix(1);
       state_ = 0;
     } else {
-      input_.remove_prefix(p.second);
+      input_.remove_prefix(consumed);
       state_ = 0;
     }
 
     return p;
-  }
-
-  void push(const std::pair<absl::string_view, int>& p, bool /*last*/) {
-    p_ = p;
-    empty_ = false;
-  }
-
-  bool empty() {
-    return empty_;
-  }
-
-  std::pair<absl::string_view, int> pop() {
-    empty_ = true;
-    return p_;
   }
 };
 
@@ -216,7 +162,7 @@ std::unique_ptr<CaseEncoder> CaseEncoder::Create(bool encodeCase, bool decodeCas
   } else if(decodeCase) {
     return std::unique_ptr<CaseEncoder>(new UpperCaseDecoder());
   } else {
-    return std::unique_ptr<CaseEncoder>(new IdentityCaseEncoder());
+    return std::unique_ptr<CaseEncoder>(new CaseEncoder());
   }
 }
 

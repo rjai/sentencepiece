@@ -37,6 +37,7 @@
 
 #include "normalization_rule.h"
 #include "normalizer.h"
+#include "case_encoder.h"
 #include "third_party/darts_clone/darts.h"
 #include "util.h"
 
@@ -479,8 +480,8 @@ util::Status Builder::BuildUncaserMap(Builder::CharsMap *chars_map) {
 #ifdef ENABLE_NFKC_COMPILE
   LOG(INFO) << "Running BuildUncaserMap";
 
-  constexpr char32 ucMarker = (char32)'U';
-  constexpr char32 ncMarker = (char32)'P';
+  constexpr char32 ucMarker = (char32)normalizer::cUppercase;
+  constexpr char32 ncMarker = (char32)normalizer::cPunctuation;
   
   constexpr int kMaxUnicode = 0x10FFFF;
   for (char32 cp = 1; cp <= kMaxUnicode; ++cp) {
@@ -508,8 +509,8 @@ util::Status Builder::BuildRecaserMap(Builder::CharsMap *chars_map) {
 #ifdef ENABLE_NFKC_COMPILE
   LOG(INFO) << "Running BuildRecaserMap";
 
-  constexpr char32 ucMarker = (char32)'U';
-  constexpr char32 tcMarker = (char32)'T';
+  constexpr char32 ucMarker = (char32)normalizer::cUppercase;
+  constexpr char32 tcMarker = (char32)normalizer::cTitlecase;
   constexpr int kMaxUnicode = 0x10FFFF;
   for (char32 cp = 1; cp <= kMaxUnicode; ++cp) {
     if (!U_IS_UNICODE_CHAR(cp)) {
