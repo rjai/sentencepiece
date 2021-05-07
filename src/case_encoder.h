@@ -32,6 +32,7 @@ constexpr char cUppercase = 'U';
 constexpr char cTitlecase = 'T';
 constexpr char cLowercase = 'L';
 constexpr char cPunctuation = 'P';
+constexpr char cSpace = ' ';
 
 class CaseEncoder {
 protected:
@@ -88,7 +89,7 @@ public:
     } else {
       if(sp[0] == cPunctuation)
         p.first.remove_prefix(1);
-      else if(state_ == 2)
+      else if(state_ == 2 && sp[0] != cSpace)
         buffer_.append(1, cLowercase);
 
       if(!buffer_.empty()) {
