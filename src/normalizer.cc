@@ -148,6 +148,7 @@ util::Status Normalizer::Normalize(absl::string_view input,
   while (!input.empty()) {
 
     auto p = case_encoder->normalizePrefix(input);
+    case_encoder->push(p, input.size() == p.second);
     
     while(!case_encoder->empty()) {
       absl::string_view sp = case_encoder->pop().first;

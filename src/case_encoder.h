@@ -37,10 +37,7 @@ public:
   virtual ~CaseEncoder() {}
   
   virtual std::pair<absl::string_view, int> normalizePrefix(absl::string_view input) {
-    auto p = normalizer_(input);
-    int sp_consumed = p.second;
-    push(p, /*last=*/input.size() == sp_consumed);
-    return p;
+    return normalizer_(input);
   }
 
   virtual void push(const std::pair<absl::string_view, int>& p, bool last) = 0;
@@ -145,37 +142,72 @@ public:
 };
 
 class UpperCaseDecoder : public CaseEncoder {
-  std::vector<std::string> buffers_;
-  std::deque<std::pair<absl::string_view, int>> pieces_;
-  bool flush_{false};
+private:
+  std::unique_ptr<std::string> buffer_;
+  absl::string_view input_;
+
+  std::pair<absl::string_view, int> p_;
+  bool empty_{true};
+
+  int state_ = 0;
 
 public:
   UpperCaseDecoder() {}
 
-  void push(const std::pair<absl::string_view, int>& p, bool last) {
-    auto sp = p.first;
+  std::pair<absl::string_view, int> normalizePrefix(absl::string_view input) {
+    if(!buffer_) {
+      buffer_.reset(new std::string(input.data(), input.size()));
+      input_ = absl::string_view(*buffer_);
+    }
 
-    std::cerr << p.first << std::endl;
-    pieces_.push_back(p);
-    flush_ = true;
-    
-    if(last)
-      flush_ = true; // flush it all out
+    auto p = CaseEncoder::normalizePrefix(input_);
+
+    if(input_[0] == 'U') {
+      if(state_ == 0) { 
+        input_.remove_prefix(p.second - 1);
+        const_cast<char&>(input_[0]) = 'U';
+        state_ = 1;
+      } else if(state_ == 1) {
+        if(p.second > 1) {
+          input_.remove_prefix(p.second - 1);
+          const_cast<char&>(input_[0]) = 'U';
+          p.second = p.second - 1;
+          state_ = 1;
+        } else {
+          input_.remove_prefix(p.second);
+          p.first.remove_prefix(1);
+          p.second = 0;
+          state_ = 0;
+        }
+      }
+    } else if(input_[0] == 'L') {
+      input_.remove_prefix(p.second);
+      p.first.remove_prefix(1);
+      state_ = 0;
+    } else {
+      input_.remove_prefix(p.second);
+      state_ = 0;
+    }
+
+    return p;
+  }
+
+  void push(const std::pair<absl::string_view, int>& p, bool /*last*/) {
+    p_ = p;
+    empty_ = false;
   }
 
   bool empty() {
-    return pieces_.empty() || !flush_;
+    return empty_;
   }
 
   std::pair<absl::string_view, int> pop() {
-    auto p = pieces_.front();
-    pieces_.pop_front();
-    return p;
+    empty_ = true;
+    return p_;
   }
 };
 
 std::unique_ptr<CaseEncoder> CaseEncoder::Create(bool encodeCase, bool decodeCase) {
-  // LOG(INFO) << encodeCase << " " << decodeCase;
   if(encodeCase && decodeCase) {
     LOG(ERROR) << "Cannot set both encodeCase=true and decodeCase=true";
     return nullptr;
