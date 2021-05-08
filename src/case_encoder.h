@@ -29,10 +29,9 @@ namespace sentencepiece {
 namespace normalizer {
 
 constexpr char cUppercase = 'U';
+constexpr char cAllUppercase = 'A';
 constexpr char cTitlecase = 'T';
 constexpr char cLowercase = 'L';
-constexpr char cPunctuation = 'P';
-constexpr char cSpace = ' ';
 
 class CaseEncoder {
 protected:
@@ -51,55 +50,148 @@ public:
   }
 
   static std::unique_ptr<CaseEncoder> Create(bool, bool);
+
+  static inline bool isUpper(const absl::string_view& sp) { return sp[0] == cUppercase; }
+  static inline bool isLower(const absl::string_view& sp) { return sp[0] == cLowercase; }
+  static inline bool isNeutral(const absl::string_view& sp) { return !isLower(sp) && !isUpper(sp); }
 };
 
 class UpperCaseEncoder : public CaseEncoder {
 private:
   std::string buffer_;
-  int state_ = 0;
+  
+  bool upperCaseMode_{false};
+  bool prevNeutral_{false};
+  size_t numUpper_ = 0;
+  size_t numSpans_ = 0;
+  bool flushed_{false};
+
+  absl::string_view buffer(absl::string_view sp, int rm, bool last) {
+    if(last) {
+      return flush(sp, rm);
+    } else {
+      flushed_ = false;
+      sp.remove_prefix(rm);
+      buffer_.append(sp.data(), sp.size());
+      return absl::string_view(nullptr, 0);
+    }
+  }
+
+  absl::string_view flush(absl::string_view sp, int rm) {
+    flushed_ = true;
+    if(rm)
+      sp.remove_prefix(rm);
+
+    if(!buffer_.empty()) {
+      buffer_.append(sp.data(), sp.size());
+      return absl::string_view(buffer_);
+    } else {
+      return sp;
+    }
+  }
 
 public:
   UpperCaseEncoder() {}
 
   std::pair<absl::string_view, int> normalizePrefix(absl::string_view input) {
+    //std::cerr << "IN:  " << std::string(input) << std::endl;
+
     auto p = CaseEncoder::normalizePrefix(input);
+
+    //std::cerr << "|" << std::string(p.first) << "| " << p.second << std::endl;
+
     auto sp = p.first;
     int consumed = p.second;
 
     bool last = input.size() == (size_t)consumed;
-    decltype(p) ret;
+    decltype(p) ret = p;
 
-    if(state_ == 0)
+    if(flushed_)
       buffer_.clear();
 
-    if(sp[0] == cUppercase) {
-      if(state_ == 0) {
-        buffer_.append(sp.data(), sp.size());
-        buffer_[0] = cTitlecase;
-        state_ = 1;
-        ret = {{nullptr, 0}, consumed};
-      } else if(state_ == 1 || state_ == 2) {
-        buffer_.append(sp.data() + 1, sp.size() - 1);
-        buffer_[0] = cUppercase;
-        state_ = 2;
-        ret = {{nullptr, 0}, consumed};
-      }  
-      if(last)
-        ret.first = absl::string_view(buffer_);
-    } else {
-      if(sp[0] == cPunctuation)
-        p.first.remove_prefix(1);
-      else if(state_ == 2 && sp[0] != cSpace)
-        buffer_.append(1, cLowercase);
-
-      if(!buffer_.empty()) {
-        buffer_.append(p.first.data(), p.first.size());
-        p.first = absl::string_view(buffer_);
+    if(isNeutral(sp)) {
+    
+      ret.first = flush(sp, 0);
+    
+    } else if(isLower(sp)) {
+    
+      if(numUpper_ == 0) { // only letter
+        ret.first = flush(sp, 1);
+      } else if(numUpper_ == 1) { // convert to T
+        ret.first = flush(sp, 1);
+        const_cast<char&>(ret.first[0]) = cTitlecase;
+      } else /*if(numUpper_ > 1)*/ { // with L
+        ret.first = flush(sp, 0);
       }
-      state_ = 0;
-      ret = p;
+      numUpper_ = 0;
+    
+    } else if(isUpper(sp)) {
+    
+      if(numUpper_ == 0)
+        ret.first = buffer(sp, 0, last);
+      else if(numUpper_ > 0)
+        ret.first = flush(sp, 1);
+      numUpper_++;
+    
     }
 
+    // if(state_ == 0 || state_ == 4)
+    //   buffer_.clear();
+
+    // if(isUpper(sp)) {
+    //   if(state_ == 0) {
+    //     buffer_.append(sp.data(), sp.size());
+    //     buffer_[0] = cTitlecase;
+    //     state_ = 1;
+    //     ret = {{nullptr, 0}, consumed};
+    //   } else if(state_ == 1 || state_ == 2) {
+    //     buffer_.append(sp.data() + 1, sp.size() - 1);
+    //     buffer_[0] = cUppercase;
+    //     state_ = 2;
+    //     ret = {{nullptr, 0}, consumed};
+    //   } else if(state_ == 3) {
+    //     buffer_.append(sp.data() + 1, sp.size() - 1);
+    //     buffer_[0] = cAllUppercase;
+    //     state_ = 4;
+    //     p.first = absl::string_view(buffer_);
+    //     ret = p;
+    //   } else if(state_ == 4) {
+    //     p.first.remove_prefix(1);
+    //     if(!buffer_.empty()) {
+    //       buffer_.append(p.first.data(), p.first.size());
+    //       p.first = absl::string_view(buffer_);
+    //     }
+    //     state_ = 4;
+    //     ret = p;
+    //   }
+    //   if(last)
+    //     ret.first = absl::string_view(buffer_);
+    // } else if(isLower(sp)) {
+    //   p.first.remove_prefix(1);
+    
+    //   if(state_ == 2 || state_ == 4)
+    //     buffer_.append(1, cLowercase);
+    
+    //   if(!buffer_.empty()) {
+    //     buffer_.append(p.first.data(), p.first.size());
+    //     p.first = absl::string_view(buffer_);
+    //   }
+    //   state_ = 0;
+    //   ret = p;
+    // } else /*if(isNeutral(sp))*/ {
+    //   if(!buffer_.empty()) {
+    //     buffer_.append(p.first.data(), p.first.size());
+    //     p.first = absl::string_view(buffer_);
+    //   }
+    //   if(state_ == 2) {
+    //     state_ = 3;
+    //     ret = {{nullptr, 0}, consumed};
+    //   } else {
+    //     ret = p;
+    //   }
+    // }
+
+    // std::cerr << upperCaseMode_ << " " << numUpper_ << " |" << std::string(ret.first) << "| " << ret.second << std::endl;
     return ret;
   }
 };

@@ -172,6 +172,8 @@ util::Status Normalizer::Normalize(absl::string_view input,
       is_prev_space = absl::EndsWith(sp, " ");
     }
 
+    //std::cerr << "OUT: " << *normalized << std::endl;
+
     consumed += p.second; 
     input.remove_prefix(p.second);
     if (!spec_->remove_extra_whitespaces()) {

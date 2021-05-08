@@ -481,7 +481,7 @@ util::Status Builder::BuildUncaserMap(Builder::CharsMap *chars_map) {
   LOG(INFO) << "Running BuildUncaserMap";
 
   constexpr char32 ucMarker = (char32)normalizer::cUppercase;
-  constexpr char32 ncMarker = (char32)normalizer::cPunctuation;
+  constexpr char32 lcMarker = (char32)normalizer::cLowercase;
   
   constexpr int kMaxUnicode = 0x10FFFF;
   for (char32 cp = 1; cp <= kMaxUnicode; ++cp) {
@@ -489,14 +489,13 @@ util::Status Builder::BuildUncaserMap(Builder::CharsMap *chars_map) {
       continue;
     }
 
-    if(u_ispunct(cp))
-      (*chars_map)[{cp}] = {ncMarker, cp};
-
     if(u_isupper(cp)) {
       const char32 trg = u_foldCase(cp, U_FOLD_CASE_DEFAULT);
       if (trg != cp && u_islower(trg))
         (*chars_map)[{cp}] = {ucMarker, trg};
     }
+    if(u_islower(cp))
+      (*chars_map)[{cp}] = {lcMarker, cp};
   }
 
   LOG(INFO) << "Character map size for Uncaser: " << chars_map->size();
