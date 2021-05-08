@@ -179,7 +179,7 @@ util::Status Normalizer::Normalize(absl::string_view input,
     }
   }
 
-  // std::cerr << *normalized << std::endl;
+  std::cerr << *normalized << std::endl;
 
   // Ignores tailing space.
   if (spec_->remove_extra_whitespaces()) {
