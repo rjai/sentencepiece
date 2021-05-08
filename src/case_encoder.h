@@ -78,10 +78,7 @@ public:
     };
 
     auto isUpper  = [=](absl::string_view sp) { return sp[0] == cUppercase;   };
-    auto isPunct  = [=](absl::string_view sp) { return sp[0] == cPunctuation; };
     auto isSpace  = [=](absl::string_view sp) { return sp[0] == ' '; };
-    auto isLower  = [=](absl::string_view sp) { return !isUpper(sp) && !isSpace(sp) && !isPunct(sp); };
-    auto isNocase = [=](absl::string_view sp) { return !isUpper(sp) && !isLower(sp); };
 
     if(state_ == 0)
       buffer_.clear();
@@ -106,9 +103,7 @@ public:
         ret.first = absl::string_view(buffer_);
 
     } else {
-      if(isPunct(sp))
-        sp.remove_prefix(1);
-      else if(state_ == 2 && !isSpace(sp))
+      if(state_ == 2 && !isSpace(sp))
         buffer_ += cLowercase;
 
       if(!buffer_.empty()) {
