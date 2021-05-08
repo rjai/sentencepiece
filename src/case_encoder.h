@@ -69,33 +69,55 @@ public:
     bool last = input.size() == (size_t)consumed;
     decltype(p) ret;
 
+    auto null = [](int consumed) -> std::pair<absl::string_view, int> {
+      return {{nullptr, 0}, consumed};
+    };
+
+    auto buffer = [this](absl::string_view sp) {
+      buffer_.append(sp.data(), sp.size());
+    };
+
+    auto isUpper  = [=](absl::string_view sp) { return sp[0] == cUppercase;   };
+    auto isPunct  = [=](absl::string_view sp) { return sp[0] == cPunctuation; };
+    auto isSpace  = [=](absl::string_view sp) { return sp[0] == ' '; };
+    auto isLower  = [=](absl::string_view sp) { return !isUpper(sp) && !isSpace(sp) && !isPunct(sp); };
+    auto isNocase = [=](absl::string_view sp) { return !isUpper(sp) && !isLower(sp); };
+
     if(state_ == 0)
       buffer_.clear();
 
-    if(sp[0] == cUppercase) {
+    if(isUpper(sp)) {
       if(state_ == 0) {
-        buffer_.append(sp.data(), sp.size());
+        buffer(sp);
+        
         buffer_[0] = cTitlecase;
         state_ = 1;
-        ret = {{nullptr, 0}, consumed};
+        ret = null(consumed);
       } else if(state_ == 1 || state_ == 2) {
-        buffer_.append(sp.data() + 1, sp.size() - 1);
+        sp.remove_prefix(1);
+        buffer(sp);
+
         buffer_[0] = cUppercase;
         state_ = 2;
-        ret = {{nullptr, 0}, consumed};
+        ret = null(consumed);
       }  
+
       if(last)
         ret.first = absl::string_view(buffer_);
+
     } else {
-      if(sp[0] == cPunctuation)
-        p.first.remove_prefix(1);
-      else if(state_ == 2 && sp[0] != cSpace)
-        buffer_.append(1, cLowercase);
+      if(isPunct(sp))
+        sp.remove_prefix(1);
+      else if(state_ == 2 && !isSpace(sp))
+        buffer_ += cLowercase;
 
       if(!buffer_.empty()) {
-        buffer_.append(p.first.data(), p.first.size());
+        buffer(sp);
         p.first = absl::string_view(buffer_);
+      } else {
+        p.first = sp;
       }
+      
       state_ = 0;
       ret = p;
     }
