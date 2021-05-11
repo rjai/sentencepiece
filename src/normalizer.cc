@@ -179,8 +179,6 @@ util::Status Normalizer::Normalize(absl::string_view input,
     }
   }
 
-  std::cerr << *normalized << std::endl;
-
   // Ignores tailing space.
   if (spec_->remove_extra_whitespaces()) {
     const absl::string_view space =
@@ -198,6 +196,9 @@ util::Status Normalizer::Normalize(absl::string_view input,
   if (treat_whitespace_as_suffix_ && spec_->add_dummy_prefix()) add_ws();
 
   norm_to_orig->push_back(consumed);
+
+  if(case_encoder)
+    case_encoder->postProcess(normalized, norm_to_orig);
 
   CHECK_EQ_OR_RETURN(norm_to_orig->size(), normalized->size() + 1);
 

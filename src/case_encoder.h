@@ -20,6 +20,7 @@
 #include <string>
 #include <utility>
 #include <deque>
+#include <regex>
 
 #include "common.h"
 #include "third_party/absl/strings/string_view.h"
@@ -28,11 +29,12 @@
 namespace sentencepiece {
 namespace normalizer {
 
-constexpr char cUppercase = 'U';
-constexpr char cTitlecase = 'T';
-constexpr char cLowercase = 'L';
-constexpr char cPunctuation = 'P';
-constexpr char cSpace = ' ';
+constexpr char cUppercase    = 'U';
+constexpr char cAllUppercase = 'A';
+constexpr char cTitlecase    = 'T';
+constexpr char cLowercase    = 'L';
+constexpr char cPunctuation  = 'P';
+constexpr char cSpace        = ' ';
 
 class CaseEncoder {
 protected:
@@ -50,13 +52,17 @@ public:
     normalizer_ = normalizer;
   }
 
+  virtual void postProcess(std::string* normalized, std::vector<size_t>* norm_to_orig) {}
+
   static std::unique_ptr<CaseEncoder> Create(bool, bool);
 };
 
 class UpperCaseEncoder : public CaseEncoder {
 private:
   std::string buffer_;
-  int state_ = 0;
+  std::string signature_;
+  
+  int state_{0};
 
 public:
   UpperCaseEncoder() {}
@@ -80,8 +86,6 @@ public:
     auto isUpper  = [=](absl::string_view sp) { return sp[0] == cUppercase;   };
     auto isPunct  = [=](absl::string_view sp) { return sp[0] == cPunctuation; };
     auto isSpace  = [=](absl::string_view sp) { return sp[0] == ' '; };
-    auto isLower  = [=](absl::string_view sp) { return !isUpper(sp) && !isSpace(sp) && !isPunct(sp); };
-    auto isNocase = [=](absl::string_view sp) { return !isUpper(sp) && !isLower(sp); };
 
     if(state_ == 0)
       buffer_.clear();
@@ -93,6 +97,10 @@ public:
         buffer_[0] = cTitlecase;
         state_ = 1;
         ret = null(consumed);
+        
+        signature_.append("U");
+        signature_.append(sp.size() - 1, 'u');
+
       } else if(state_ == 1 || state_ == 2) {
         sp.remove_prefix(1);
         buffer(sp);
@@ -100,16 +108,27 @@ public:
         buffer_[0] = cUppercase;
         state_ = 2;
         ret = null(consumed);
+
+        signature_.append(sp.size(), 'u');
       }  
 
       if(last)
         ret.first = absl::string_view(buffer_);
 
     } else {
-      if(isPunct(sp))
+      if(isPunct(sp)) {
         sp.remove_prefix(1);
-      else if(state_ == 2 && !isSpace(sp))
+        signature_.append(sp.size(), 'p');
+      }
+      else if(state_ == 2 && !isSpace(sp)) {
         buffer_ += cLowercase;
+        signature_.append("L");
+        signature_.append(sp.size(), 'l');
+      } else if(isSpace(sp)) {
+        signature_.append("sss");
+      } else {
+        signature_.append(sp.size(), 'l');
+      }
 
       if(!buffer_.empty()) {
         buffer(sp);
@@ -124,6 +143,64 @@ public:
 
     return ret;
   }
+
+  virtual void postProcess(std::string* normalized, std::vector<size_t>* norm_to_orig) { 
+    // @TODO: implement this short circuit for speed up
+    // if(!seenU_)
+    //   return;
+
+    // @TODO: implement this without regex, this is too slow
+    std::smatch m;
+    std::regex e("(?:Uu+(sss|p)+){3,}");
+    
+    std::string normalized_temp;
+    normalized_temp.reserve(normalized->size());
+    
+    std::vector<size_t> norm_to_orig_temp;
+    norm_to_orig_temp.reserve(norm_to_orig->size());
+
+    auto sig_it = signature_.cbegin();
+    auto nrm_it = normalized->cbegin();
+    auto n2o_it = norm_to_orig->cbegin();
+
+    while(std::regex_search(sig_it, signature_.cend(), m, e)) {
+      auto span = m[0];
+      size_t len = std::distance(sig_it, span.first);
+      normalized_temp.insert(normalized_temp.end(), nrm_it, nrm_it + len);
+      norm_to_orig_temp.insert(norm_to_orig_temp.end(), n2o_it, n2o_it + len);
+
+      sig_it += len; 
+      nrm_it += len;
+      n2o_it += len;
+      normalized_temp.push_back(cAllUppercase);
+      norm_to_orig_temp.push_back(*n2o_it);
+            
+      while(sig_it != span.second) {
+        if(*sig_it == cUppercase) {
+          sig_it++; 
+          nrm_it++;
+          n2o_it++;
+        }
+        sig_it++;
+        normalized_temp.push_back(*nrm_it++);
+        norm_to_orig_temp.push_back(*n2o_it++);
+      }
+      if(sig_it != signature_.cend()) { 
+        if(*sig_it != cUppercase) {
+          normalized_temp.push_back(cLowercase);
+          norm_to_orig_temp.push_back(*n2o_it);
+        }
+      }
+    }
+
+    if(nrm_it != normalized->cend())
+      normalized_temp.insert(normalized_temp.end(), nrm_it, normalized->cend());
+    if(n2o_it != norm_to_orig->cend())
+      norm_to_orig_temp.insert(norm_to_orig_temp.end(), n2o_it, norm_to_orig->cend());
+
+    normalized->swap(normalized_temp);
+    norm_to_orig->swap(norm_to_orig_temp);
+  }
 };
 
 class UpperCaseDecoder : public CaseEncoder {
@@ -132,6 +209,7 @@ private:
   absl::string_view input_;
 
   int state_ = 0;
+  bool allUp_{false};
 
 public:
   UpperCaseDecoder() {}
@@ -140,6 +218,15 @@ public:
     if(!buffer_) {
       buffer_.reset(new std::string(input.data(), input.size()));
       input_ = absl::string_view(*buffer_);
+    }
+
+    if(input_[0] == cAllUppercase) {
+      const_cast<char&>(input_[0]) = cUppercase;
+      allUp_ = true;
+    } else if (input_[0] == cTitlecase) {
+      allUp_ = false;
+    } else if (input_[0] == cLowercase) {
+      allUp_ = false;
     }
 
     auto p = CaseEncoder::normalizePrefix(input_);
@@ -168,8 +255,15 @@ public:
       p.first.remove_prefix(1);
       state_ = 0;
     } else {
-      input_.remove_prefix(consumed);
-      state_ = 0;
+      if(allUp_) {
+        p.first = absl::string_view(input.data(), p.first.size());
+        input_.remove_prefix(consumed - 1);
+        const_cast<char&>(input_[0]) = cUppercase;
+        state_ = 1;
+      } else {
+        input_.remove_prefix(consumed);
+        state_ = 0;
+      }
     }
 
     return p;
