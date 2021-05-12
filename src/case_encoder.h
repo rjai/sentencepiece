@@ -63,6 +63,8 @@ private:
   std::string signature_;
   
   int state_{0};
+  size_t spans_{0};
+  bool seenThreeSpans_{false};
 
 public:
   UpperCaseEncoder() {}
@@ -102,6 +104,9 @@ public:
         signature_.append(sp.size() - 1, 'u');
 
       } else if(state_ == 1 || state_ == 2) {
+        if(state_ == 1)
+          spans_++;
+        
         sp.remove_prefix(1);
         buffer(sp);
 
@@ -117,16 +122,22 @@ public:
 
     } else {
       if(isPunct(sp)) {
+        if(state_ == 1)
+          spans_++;
+
         sp.remove_prefix(1);
         signature_.append(sp.size(), 'p');
-      }
-      else if(state_ == 2 && !isSpace(sp)) {
+      } else if(state_ == 2 && !isSpace(sp)) {
+        spans_ = 0;
         buffer_ += cLowercase;
         signature_.append("L");
         signature_.append(sp.size(), 'l');
       } else if(isSpace(sp)) {
+        if(state_ == 1)
+          spans_++;
         signature_.append("sss");
       } else {
+        spans_ = 0;
         signature_.append(sp.size(), 'l');
       }
 
@@ -141,17 +152,19 @@ public:
       ret = p;
     }
 
+    if(spans_ >= 3)
+      seenThreeSpans_ = true;
+
     return ret;
   }
 
   virtual void postProcess(std::string* normalized, std::vector<size_t>* norm_to_orig) { 
-    // @TODO: implement this short circuit for speed up
-    // if(!seenU_)
-    //   return;
+    if(!seenThreeSpans_)
+      return;
 
     // @TODO: implement this without regex, this is too slow
     std::smatch m;
-    std::regex e("(?:Uu+(sss|p)+){3,}");
+    std::regex e("(?:Uu+(sss|p)+){3,}"); // long-range sequence of 3 or more uppercase tokens
     
     std::string normalized_temp;
     normalized_temp.reserve(normalized->size());
