@@ -54,7 +54,7 @@ public:
 
   virtual void postProcess(std::string* normalized, std::vector<size_t>* norm_to_orig) {}
 
-  static std::unique_ptr<CaseEncoder> Create(bool, bool);
+  static std::unique_ptr<CaseEncoder> Create(bool, bool, bool);
 };
 
 class UpperCaseEncoder : public CaseEncoder {
@@ -65,9 +65,11 @@ private:
   int state_{0};
   size_t spans_{0};
   bool seenThreeSpans_{false};
+  bool removeExtraWhiteSpace_{false};
 
 public:
-  UpperCaseEncoder() {}
+  UpperCaseEncoder(bool removeExtraWhiteSpace)
+  : removeExtraWhiteSpace_(removeExtraWhiteSpace) {}
 
   std::pair<absl::string_view, int> normalizePrefix(absl::string_view input) {
     auto p = CaseEncoder::normalizePrefix(input);
@@ -135,7 +137,8 @@ public:
       } else if(isSpace(sp)) {
         if(state_ == 1)
           spans_++;
-        signature_.append("sss");
+        if(!removeExtraWhiteSpace_ || signature_.empty() || signature_.back() != 's')
+          signature_.append("sss");
       } else {
         spans_ = 0;
         signature_.append(sp.size(), 'l');
@@ -164,7 +167,7 @@ public:
 
     // @TODO: implement this without regex, this is too slow
     std::smatch m;
-    std::regex e("(?:Uu+(sss|p)+){3,}"); // long-range sequence of 3 or more uppercase tokens
+    std::regex e("(?:Uu+(sss|p|$)+){3,}"); // long-range sequence of 3 or more uppercase tokens
     
     std::string normalized_temp;
     normalized_temp.reserve(normalized->size());
