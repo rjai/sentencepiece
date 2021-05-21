@@ -215,6 +215,7 @@ public:
         }
       }
     } catch (std::regex_error&) {
+        LOG(WARNING) << "Regex error encountered in case encoding; rejecting sentence";
         return;
     }
 
