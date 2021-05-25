@@ -15,6 +15,8 @@
 #ifndef NORMALIZER_CASE_ENCODER_H_
 #define NORMALIZER_CASE_ENCODER_H_
 
+// Reduce liklihood of regex_error exceptions on VSC compiled bins by increasing the 
+// library specific stack size and complexity limits for regex on VSC
 #ifdef _MSC_VER
 #define _REGEX_MAX_STACK_COUNT 200000
 #define _REGEX_MAX_COMPLEXITY_COUNT 0
@@ -215,7 +217,7 @@ public:
         }
       }
     } catch (std::regex_error&) {
-        LOG(WARNING) << "Regex error encountered in case encoding; rejecting sentence";
+        LOG(WARNING) << "regex_error with unicode case encoding; rejecting sentence";
         return;
     }
 
