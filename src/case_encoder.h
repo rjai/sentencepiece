@@ -15,8 +15,8 @@
 #ifndef NORMALIZER_CASE_ENCODER_H_
 #define NORMALIZER_CASE_ENCODER_H_
 
-// Reduce liklihood of regex_error exceptions on VSC compiled bins by increasing the 
-// library specific stack size and complexity limits for regex on VSC
+// Reduce liklihood of regex_error exceptions on VSC compiled bins by increasing
+// library specific stack size and complexity limits
 #ifdef _MSC_VER
 #define _REGEX_MAX_STACK_COUNT 200000
 #define _REGEX_MAX_COMPLEXITY_COUNT 0
