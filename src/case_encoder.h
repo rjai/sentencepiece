@@ -67,6 +67,9 @@ public:
 class UpperCaseEncoder : public CaseEncoder {
 private:
   std::string buffer_;
+  std::vector<std::pair<absl::string_view, int> > buffer_lst_;
+  int dump_buffer_from_ = -1;
+
   std::string signature_;
   int offset = 0;
   
@@ -80,6 +83,18 @@ public:
   : removeExtraWhiteSpace_(removeExtraWhiteSpace) {}
 
   std::pair<absl::string_view, int> normalizePrefix(absl::string_view orig_input) {
+
+    if((dump_buffer_from_ >= 0) && (dump_buffer_from_ < buffer_lst_.size())) {
+      dump_buffer_from_++;
+      return buffer_lst_[dump_buffer_from_ - 1];
+    }
+
+    if(dump_buffer_from_ > -1) {
+      dump_buffer_from_ = -1;
+      buffer_lst_.clear();
+      return {nullptr, 0};
+    }
+
     const auto input = orig_input.substr(offset);
     auto p = CaseEncoder::normalizePrefix(input);
     auto sp = p.first;
@@ -93,8 +108,11 @@ public:
       return {{nullptr, 0}, 0};
     };
 
-    auto buffer = [this](absl::string_view sp) {
+    auto buffer = [this, p](absl::string_view sp) {
+      auto cur_buf_last = buffer_.size();
       buffer_.append(sp.data(), sp.size());
+      auto tmp_str = absl::string_view(buffer_).substr(cur_buf_last, sp.size());
+      buffer_lst_.push_back({tmp_str, p.second});
     };
 
     auto isUpper  = [=](absl::string_view sp) { return sp[0] == cUppercase;   };
@@ -103,6 +121,7 @@ public:
 
     if(state_ == 0) {
       buffer_.clear();
+      buffer_lst_.clear();
       offset = 0;
     }
 
@@ -131,9 +150,10 @@ public:
         signature_.append(sp.size(), 'u');
       }  
 
-      if(last)
-        ret.first = absl::string_view(buffer_);
-
+      if(last) {
+        dump_buffer_from_ = 0;
+        return this->normalizePrefix(orig_input);
+      }
     } else {
       if(isPunct(sp)) {
         if(state_ == 1)
@@ -143,7 +163,12 @@ public:
         signature_.append(sp.size(), 'p');
       } else if(state_ == 2 && !isSpace(sp)) {
         spans_ = 0;
+        // TODO: Currently TmattL => L gets mapped to T, whereas, ideally t should be mapped to T, and L should be ""
         buffer_ += cLowercase;
+        auto lastbuf = buffer_lst_[buffer_lst_.size() - 1];
+        buffer_lst_[buffer_lst_.size() - 1]
+            = {absl::string_view(lastbuf.first.data(), lastbuf.first.size() + 1),
+               lastbuf.second};
         signature_.append("L");
         signature_.append(sp.size(), 'l');
       } else if(isSpace(sp)) {
@@ -158,9 +183,10 @@ public:
 
       if(!buffer_.empty()) {
         buffer(sp);
-        p.first = absl::string_view(buffer_);
-        p.second += offset;
         offset = 0;
+        dump_buffer_from_ = 0;
+        state_ = 0;
+        return this->normalizePrefix(orig_input);
       } else {
         p.first = sp;
       }
