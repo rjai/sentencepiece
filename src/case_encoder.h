@@ -151,7 +151,7 @@ public:
 
       if(last) {
         dump_buffer_from_ = 0;
-        return this->normalizePrefix(orig_input);
+        return null(0);
       }
     } else {
       if(isPunct(sp)) {
@@ -180,7 +180,7 @@ public:
         offset = 0;
         dump_buffer_from_ = 0;
         state_ = 0;
-        return this->normalizePrefix(orig_input);
+        return null(0);
       } else {
         p.first = sp;
       }
