@@ -68,6 +68,7 @@ class UpperCaseEncoder : public CaseEncoder {
 private:
   std::string buffer_;
   std::string signature_;
+  int offset = 0;
   
   int state_{0};
   size_t spans_{0};
@@ -78,7 +79,8 @@ public:
   UpperCaseEncoder(bool removeExtraWhiteSpace)
   : removeExtraWhiteSpace_(removeExtraWhiteSpace) {}
 
-  std::pair<absl::string_view, int> normalizePrefix(absl::string_view input) {
+  std::pair<absl::string_view, int> normalizePrefix(absl::string_view orig_input) {
+    const auto input = orig_input.substr(offset);
     auto p = CaseEncoder::normalizePrefix(input);
     auto sp = p.first;
     int consumed = p.second;
@@ -86,8 +88,9 @@ public:
     bool last = input.size() == (size_t)consumed;
     decltype(p) ret;
 
-    auto null = [](int consumed) -> std::pair<absl::string_view, int> {
-      return {{nullptr, 0}, consumed};
+    auto null = [this](int consumed) -> std::pair<absl::string_view, int> {
+      offset += consumed;
+      return {{nullptr, 0}, 0};
     };
 
     auto buffer = [this](absl::string_view sp) {
@@ -98,8 +101,10 @@ public:
     auto isPunct  = [=](absl::string_view sp) { return sp[0] == cPunctuation; };
     auto isSpace  = [=](absl::string_view sp) { return sp[0] == ' '; };
 
-    if(state_ == 0)
+    if(state_ == 0) {
       buffer_.clear();
+      offset = 0;
+    }
 
     if(isUpper(sp)) {
       if(state_ == 0) {
@@ -154,6 +159,8 @@ public:
       if(!buffer_.empty()) {
         buffer(sp);
         p.first = absl::string_view(buffer_);
+        p.second += offset;
+        offset = 0;
       } else {
         p.first = sp;
       }
