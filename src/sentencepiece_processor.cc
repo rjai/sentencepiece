@@ -512,7 +512,7 @@ util::Status SentencePieceProcessor::Decode(
     unk_surface = model_proto_->trainer_spec().unk_surface().c_str();
 
   auto DecodeSentencePiece = [&](absl::string_view piece, int id,
-                                 bool is_bos_ws) -> std::string {
+                                 bool is_bos_ws, bool is_eos_ws) -> std::string {
     if (IsControl(id)) {  // <s>, </s>
       return "";          // invisible symbol.
     } else if (IsUnknown(id)) {
@@ -523,14 +523,28 @@ util::Status SentencePieceProcessor::Decode(
       }
     }
 
-    if (is_bos_ws &&
-        (!model_proto_ ||
-         (model_proto_ &&
-          (model_proto_->normalizer_spec().add_dummy_prefix() ||
-           model_proto_->normalizer_spec().remove_extra_whitespaces())))) {
-      // Consume if the current position is bos and
-      // piece starts with kSpaceSymbol.
-      absl::ConsumePrefix(&piece, kSpaceSymbol);
+    if(!model_proto_ || !model_proto_->has_trainer_spec()
+       || !model_proto_->trainer_spec().treat_whitespace_as_suffix()) {
+      if(is_bos_ws
+         && (!model_proto_
+             || (model_proto_
+                 && (model_proto_->normalizer_spec().add_dummy_prefix()
+                     || model_proto_->normalizer_spec().remove_extra_whitespaces())))) {
+        // Consume if the current position is bos and
+        // piece starts with kSpaceSymbol.
+        absl::ConsumePrefix(&piece, kSpaceSymbol);
+      }
+    } else {
+        if(is_eos_ws
+           && (!model_proto_
+               || (model_proto_
+                   && (model_proto_->normalizer_spec().add_dummy_prefix()
+                       || model_proto_->normalizer_spec().remove_extra_whitespaces())))) {
+          // Consume if the current position is eos and
+          // piece ends with kSpaceSymbol.
+          if(absl::EndsWith(piece, kSpaceSymbol))
+            piece.remove_suffix(3);
+        }
     }
 
     return absl::StrReplaceAll(piece, {{kSpaceSymbol, " "}});
@@ -594,7 +608,8 @@ util::Status SentencePieceProcessor::Decode(
     if (!IsByte(sp.id())) {
       RETURN_IF_ERROR(ProcessBytePieces(byte_start, i));
       byte_start = i + 1;
-      SetSurface(i, DecodeSentencePiece(sp.piece(), sp.id(), text->empty()));
+      bool is_eos_space = i == spt->pieces_size() - 1;
+      SetSurface(i, DecodeSentencePiece(sp.piece(), sp.id(), text->empty(), is_eos_space));
     }
   }
   RETURN_IF_ERROR(ProcessBytePieces(byte_start, spt->pieces_size()));
