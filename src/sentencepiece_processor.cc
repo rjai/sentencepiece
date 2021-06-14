@@ -600,7 +600,37 @@ util::Status SentencePieceProcessor::Decode(
   RETURN_IF_ERROR(ProcessBytePieces(byte_start, spt->pieces_size()));
 
   if (denormalizer_) {
-    *text = denormalizer_->Normalize(*text);
+    std::string normalized;
+    std::vector<size_t> norm_to_orig;
+    denormalizer_->Normalize(*text, &normalized, &norm_to_orig);
+    *text = normalized;
+    std::map<int, int> orig_to_norm;
+    for(int i = 0; i < norm_to_orig.size(); i++) {
+      orig_to_norm.insert_or_assign(norm_to_orig[i], i);
+    }
+
+    int normalized_piece_surface_index = 0;
+    int text_piece_surface_index = 0;
+    // Text is de-normalized, but pieces still need de-normalization.
+    for(int i = 0; i < spt->pieces_size(); i++) {
+      auto *spiece = spt->mutable_pieces(i);
+      auto curr_surface = spiece->surface();
+
+      // De-normalize curr_surface using o2n. Missing chars are deleted (ambiguous)
+      std::string new_surface;
+      for(int j = text_piece_surface_index; j < text_piece_surface_index + curr_surface.size();
+          j++) {
+        auto norm_index = orig_to_norm.find(j + 1);
+        if(norm_index != orig_to_norm.end())
+          new_surface.push_back(normalized[norm_index->second - 1]);
+      }
+      text_piece_surface_index += curr_surface.size();
+
+      spiece->set_surface(new_surface);
+      spiece->set_begin(normalized_piece_surface_index);
+      normalized_piece_surface_index += new_surface.size();
+      spiece->set_end(normalized_piece_surface_index);
+    }
   }
 
   return util::OkStatus();
