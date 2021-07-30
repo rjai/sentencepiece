@@ -99,7 +99,7 @@ public:
     auto sp = p.first;
     int consumed = p.second;
 
-    bool last = input.size() == (size_t)consumed;
+    bool last = input.size() == (size_t)consumed + offset;
     decltype(p) ret;
 
     auto null = [this](int consumed) -> std::pair<absl::string_view, int> {
