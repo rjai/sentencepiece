@@ -38,7 +38,6 @@
 #include "case_encoder.h"
 #include "normalization_rule.h"
 #include "normalizer.h"
-#include "case_encoder.h"
 #include "third_party/darts_clone/darts.h"
 #include "util.h"
 
