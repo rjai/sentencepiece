@@ -621,30 +621,13 @@ util::Status SentencePieceProcessor::Decode(
     *text = normalized;
     std::map<int, int> orig_to_norm;
     for(int i = 0; i < norm_to_orig.size(); i++) {
-      std::cout << i << "?";
       if (orig_to_norm.find(norm_to_orig[i]) == orig_to_norm.end()) {
-        std::cout << i << "|";
         orig_to_norm[norm_to_orig[i]] = i;
       }
     }
 
-    std::cout << "Text:" << *text << std::endl;
-    std::cout << "Normalized:" << normalized << std::endl;
-
-    std::cout << "Norm to Orig for Denormalization" << std::endl;
-    for(int i = 0; i < norm_to_orig.size(); i++) {
-      std::cout << i << ":" << norm_to_orig[i] << " ";
-    }
-
-    std::cout << std::endl << "Orig2Norm for Denormalization" << std::endl;
-    for(int i = 0; i < norm_to_orig.size(); i++) {
-      if (orig_to_norm.find(i) != orig_to_norm.end())
-        std::cout << i << ":" << orig_to_norm[i] << " ";
-    }
-
     int normalized_piece_surface_index = 0;
     int text_piece_surface_index = 0;
-    std::cout << std::endl;
     // Text is de-normalized, but pieces still need de-normalization.
     int last_consumed_byte = -1;
     for(int i = 0; i < spt->pieces_size(); i++) {
@@ -662,7 +645,6 @@ util::Status SentencePieceProcessor::Decode(
           last_consumed_byte = norm_index->second - 1;
         }
       }
-      std::cout  << "Piece:" << spiece->piece() << "| Surface:" << spiece->surface() << "| NewSurface:" << new_surface << "|" << std::endl;
 
       text_piece_surface_index += curr_surface.size();
 
@@ -672,7 +654,6 @@ util::Status SentencePieceProcessor::Decode(
       spiece->set_end(normalized_piece_surface_index);
     }
   }
-  std::cout << std::endl;
 
   return util::OkStatus();
 }
