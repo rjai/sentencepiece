@@ -125,8 +125,9 @@ public:
     if(isUpper(sp)) {
       if(state_ == 0) {
         buffer(sp);
-        
         buffer_[0] = cTitlecase;
+        buffer_queue_.front().first[0] = cTitlecase;
+        
         state_ = 1;
         ret = null(consumed);
         
@@ -139,7 +140,7 @@ public:
         
         sp.remove_prefix(1);
         buffer(sp);
-
+        buffer_queue_.front().first[0] = cUppercase;
         buffer_[0] = cUppercase;
         state_ = 2;
         ret = null(consumed);
