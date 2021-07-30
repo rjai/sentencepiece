@@ -566,7 +566,6 @@ util::Status SentencePieceProcessor::Decode(
     sp->set_end(text->size() + surface.size());
     *text += surface;
   };
-  std::set<int> byteFallbackPieces;
   auto ProcessBytePieces = [&](int begin, int end) -> util::Status {
     if (begin < end) {
       // Constructs byte sequence.
@@ -576,7 +575,6 @@ util::Status SentencePieceProcessor::Decode(
         const int byte = PieceToByte(sp.piece());
         CHECK_LE_OR_RETURN(0, byte);
         bytes.append(1, byte);
-        byteFallbackPieces.insert(i);
       }
       // Decodes byte sequence as UTF-8 and encodes the result into UTF-8 bytes
       // again.
@@ -623,43 +621,58 @@ util::Status SentencePieceProcessor::Decode(
     *text = normalized;
     std::map<int, int> orig_to_norm;
     for(int i = 0; i < norm_to_orig.size(); i++) {
+      std::cout << i << "?";
+      if (orig_to_norm.find(norm_to_orig[i]) == orig_to_norm.end()) {
+        std::cout << i << "|";
         orig_to_norm[norm_to_orig[i]] = i;
+      }
+    }
+
+    std::cout << "Text:" << *text << std::endl;
+    std::cout << "Normalized:" << normalized << std::endl;
+
+    std::cout << "Norm to Orig for Denormalization" << std::endl;
+    for(int i = 0; i < norm_to_orig.size(); i++) {
+      std::cout << i << ":" << norm_to_orig[i] << " ";
+    }
+
+    std::cout << std::endl << "Orig2Norm for Denormalization" << std::endl;
+    for(int i = 0; i < norm_to_orig.size(); i++) {
+      if (orig_to_norm.find(i) != orig_to_norm.end())
+        std::cout << i << ":" << orig_to_norm[i] << " ";
     }
 
     int normalized_piece_surface_index = 0;
     int text_piece_surface_index = 0;
-
+    std::cout << std::endl;
     // Text is de-normalized, but pieces still need de-normalization.
+    int last_consumed_byte = -1;
     for(int i = 0; i < spt->pieces_size(); i++) {
-      if (byteFallbackPieces.find(i) != byteFallbackPieces.end()) {
-        auto *spiece = spt->mutable_pieces(i);
-        auto curr_surface = spiece->surface();
-        text_piece_surface_index += curr_surface.size();
-        spiece->set_begin(normalized_piece_surface_index);
-        normalized_piece_surface_index += curr_surface.size();
-        spiece->set_end(normalized_piece_surface_index);
-      }
-      else {
-        auto *spiece = spt->mutable_pieces(i);
-        auto curr_surface = spiece->surface();
+      auto *spiece = spt->mutable_pieces(i);
+      auto curr_surface = spiece->surface();
 
-        // De-normalize curr_surface using o2n. Missing chars are deleted (ambiguous)
-        std::string new_surface;
-        for(int j = text_piece_surface_index; j < text_piece_surface_index + curr_surface.size();
-            j++) {
-          auto norm_index = orig_to_norm.find(j + 1);
-          if(norm_index != orig_to_norm.end())
-            new_surface.push_back(normalized[norm_index->second - 1]);
+      // De-normalize curr_surface using o2n. Missing chars (bytes) are deleted (ambiguous)
+      std::string new_surface;
+      for(int j = text_piece_surface_index; j < text_piece_surface_index + curr_surface.size();
+          j++) {
+        auto norm_index = orig_to_norm.find(j + 1);
+        if(norm_index != orig_to_norm.end()) {
+          for(int k = last_consumed_byte + 1; k <=  norm_index->second - 1; k++)
+            new_surface.push_back(normalized[k]);
+          last_consumed_byte = norm_index->second - 1;
         }
-        text_piece_surface_index += curr_surface.size();
-
-        spiece->set_surface(new_surface);
-        spiece->set_begin(normalized_piece_surface_index);
-        normalized_piece_surface_index += new_surface.size();
-        spiece->set_end(normalized_piece_surface_index);
       }
+      std::cout  << "Piece:" << spiece->piece() << "| Surface:" << spiece->surface() << "| NewSurface:" << new_surface << "|" << std::endl;
+
+      text_piece_surface_index += curr_surface.size();
+
+      spiece->set_surface(new_surface);
+      spiece->set_begin(normalized_piece_surface_index);
+      normalized_piece_surface_index += new_surface.size();
+      spiece->set_end(normalized_piece_surface_index);
     }
   }
+  std::cout << std::endl;
 
   return util::OkStatus();
 }
