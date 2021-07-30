@@ -15,19 +15,11 @@
 #ifndef NORMALIZER_CASE_ENCODER_H_
 #define NORMALIZER_CASE_ENCODER_H_
 
-// Reduce liklihood of regex_error exceptions on VSC compiled bins by increasing the 
-// library specific stack size and complexity limits for regex on VSC
-#ifdef _MSC_VER
-#define _REGEX_MAX_STACK_COUNT 200000
-#define _REGEX_MAX_COMPLEXITY_COUNT 0
-#endif
-
 #include <memory>
 #include <set>
 #include <string>
 #include <utility>
 #include <deque>
-#include <regex>
 
 #include "common.h"
 #include "third_party/absl/strings/string_view.h"
@@ -35,6 +27,8 @@
 
 namespace sentencepiece {
 namespace normalizer {
+
+std::vector<std::pair<const char*, const char*>> search(const std::string& input);
 
 constexpr char cUppercase    = 'U';
 constexpr char cAllUppercase = 'A';
@@ -198,53 +192,45 @@ public:
     if(!seenThreeSpans_)
       return;
 
-    // @TODO: implement this without regex, this is too slow
-    std::smatch m;
-    std::regex e("(?:Uu+(sss|p|$)+){3,}"); // long-range sequence of 3 or more uppercase tokens
-    
     std::string normalized_temp;
     normalized_temp.reserve(normalized->size());
     
     std::vector<size_t> norm_to_orig_temp;
     norm_to_orig_temp.reserve(norm_to_orig->size());
 
-    auto sig_it = signature_.cbegin();
+    const char* sig_it = signature_.data();
+
     auto nrm_it = normalized->cbegin();
     auto n2o_it = norm_to_orig->cbegin();
 
-    try {
-      while(std::regex_search(sig_it, signature_.cend(), m, e)) {
-        auto span = m[0];
-        size_t len = std::distance(sig_it, span.first);
-        normalized_temp.insert(normalized_temp.end(), nrm_it, nrm_it + len);
-        norm_to_orig_temp.insert(norm_to_orig_temp.end(), n2o_it, n2o_it + len);
+    for(const auto& span : search(signature_)) {
+      size_t len = std::distance(sig_it, span.first);
+      
+      normalized_temp.insert(normalized_temp.end(), nrm_it, nrm_it + len);
+      norm_to_orig_temp.insert(norm_to_orig_temp.end(), n2o_it, n2o_it + len);
 
-        sig_it += len; 
-        nrm_it += len;
-        n2o_it += len;
-        normalized_temp.push_back(cAllUppercase);
-        norm_to_orig_temp.push_back(*n2o_it);
+      sig_it += len; 
+      nrm_it += len;
+      n2o_it += len;
+      normalized_temp.push_back(cAllUppercase);
+      norm_to_orig_temp.push_back(*n2o_it);
             
-        while(sig_it != span.second) {
-          if(*sig_it == cUppercase) {
-            sig_it++; 
-            nrm_it++;
-            n2o_it++;
-          }
-          sig_it++;
-          normalized_temp.push_back(*nrm_it++);
-          norm_to_orig_temp.push_back(*n2o_it++);
+      while(sig_it != span.second) {
+        if(*sig_it == cUppercase) {
+          sig_it++; 
+          nrm_it++;
+          n2o_it++;
         }
-        if(sig_it != signature_.cend()) { 
-          if(*sig_it != cUppercase) {
-            normalized_temp.push_back(cLowercase);
-            norm_to_orig_temp.push_back(*n2o_it);
-          }
+        sig_it++;
+        normalized_temp.push_back(*nrm_it++);
+        norm_to_orig_temp.push_back(*n2o_it++);
+      }
+      if(sig_it != signature_.data() + signature_.length()) { 
+        if(*sig_it != cUppercase) {
+          normalized_temp.push_back(cLowercase);
+          norm_to_orig_temp.push_back(*n2o_it);
         }
       }
-    } catch (std::regex_error&) {
-        LOG(WARNING) << "regex_error with unicode case encoding; rejecting sentence";
-        return;
     }
 
     if(nrm_it != normalized->cend())
