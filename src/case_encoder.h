@@ -67,11 +67,10 @@ public:
 class UpperCaseEncoder : public CaseEncoder {
 private:
   std::string buffer_;
-  std::vector<std::pair<absl::string_view, int> > buffer_queue_;
-  int dump_buffer_from_ = -1;
-
   std::string signature_;
   int offset = 0;
+  std::vector<std::pair<std::string, int> > buffer_queue_;
+  int dump_buffer_from_ = -1;
   
   int state_{0};
   size_t spans_{0};
@@ -83,7 +82,6 @@ public:
   : removeExtraWhiteSpace_(removeExtraWhiteSpace) {}
 
   std::pair<absl::string_view, int> normalizePrefix(absl::string_view orig_input) {
-
     if((dump_buffer_from_ >= 0) && (dump_buffer_from_ < buffer_queue_.size())) {
       return buffer_queue_[dump_buffer_from_++];
     }
@@ -99,7 +97,7 @@ public:
     auto sp = p.first;
     int consumed = p.second;
 
-    bool last = input.size() == (size_t)consumed + offset;
+    bool last = input.size() == (size_t)consumed;
     decltype(p) ret;
 
     auto null = [this](int consumed) -> std::pair<absl::string_view, int> {
@@ -110,7 +108,7 @@ public:
     auto buffer = [this, p](absl::string_view sp, int override_consumed = -1) {
       auto cur_buf_last = buffer_.size();
       buffer_.append(sp.data(), sp.size());
-      auto tmp_str = absl::string_view(buffer_).substr(cur_buf_last, sp.size());
+      auto tmp_str = std::string(buffer_).substr(cur_buf_last, sp.size());
       buffer_queue_.push_back({tmp_str, override_consumed == -1 ? p.second : override_consumed});
     };
 
