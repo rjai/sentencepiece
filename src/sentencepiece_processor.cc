@@ -566,6 +566,7 @@ util::Status SentencePieceProcessor::Decode(
     sp->set_end(text->size() + surface.size());
     *text += surface;
   };
+  std::set<int> byteFallbackPieces;
   auto ProcessBytePieces = [&](int begin, int end) -> util::Status {
     if (begin < end) {
       // Constructs byte sequence.
@@ -575,6 +576,7 @@ util::Status SentencePieceProcessor::Decode(
         const int byte = PieceToByte(sp.piece());
         CHECK_LE_OR_RETURN(0, byte);
         bytes.append(1, byte);
+        byteFallbackPieces.insert(i);
       }
       // Decodes byte sequence as UTF-8 and encodes the result into UTF-8 bytes
       // again.
@@ -621,30 +623,41 @@ util::Status SentencePieceProcessor::Decode(
     *text = normalized;
     std::map<int, int> orig_to_norm;
     for(int i = 0; i < norm_to_orig.size(); i++) {
-      orig_to_norm.insert_or_assign(norm_to_orig[i], i);
+        orig_to_norm[norm_to_orig[i]] = i;
     }
 
     int normalized_piece_surface_index = 0;
     int text_piece_surface_index = 0;
+
     // Text is de-normalized, but pieces still need de-normalization.
     for(int i = 0; i < spt->pieces_size(); i++) {
-      auto *spiece = spt->mutable_pieces(i);
-      auto curr_surface = spiece->surface();
-
-      // De-normalize curr_surface using o2n. Missing chars are deleted (ambiguous)
-      std::string new_surface;
-      for(int j = text_piece_surface_index; j < text_piece_surface_index + curr_surface.size();
-          j++) {
-        auto norm_index = orig_to_norm.find(j + 1);
-        if(norm_index != orig_to_norm.end())
-          new_surface.push_back(normalized[norm_index->second - 1]);
+      if (byteFallbackPieces.find(i) != byteFallbackPieces.end()) {
+        auto *spiece = spt->mutable_pieces(i);
+        auto curr_surface = spiece->surface();
+        text_piece_surface_index += curr_surface.size();
+        spiece->set_begin(normalized_piece_surface_index);
+        normalized_piece_surface_index += curr_surface.size();
+        spiece->set_end(normalized_piece_surface_index);
       }
-      text_piece_surface_index += curr_surface.size();
+      else {
+        auto *spiece = spt->mutable_pieces(i);
+        auto curr_surface = spiece->surface();
 
-      spiece->set_surface(new_surface);
-      spiece->set_begin(normalized_piece_surface_index);
-      normalized_piece_surface_index += new_surface.size();
-      spiece->set_end(normalized_piece_surface_index);
+        // De-normalize curr_surface using o2n. Missing chars are deleted (ambiguous)
+        std::string new_surface;
+        for(int j = text_piece_surface_index; j < text_piece_surface_index + curr_surface.size();
+            j++) {
+          auto norm_index = orig_to_norm.find(j + 1);
+          if(norm_index != orig_to_norm.end())
+            new_surface.push_back(normalized[norm_index->second - 1]);
+        }
+        text_piece_surface_index += curr_surface.size();
+
+        spiece->set_surface(new_surface);
+        spiece->set_begin(normalized_piece_surface_index);
+        normalized_piece_surface_index += new_surface.size();
+        spiece->set_end(normalized_piece_surface_index);
+      }
     }
   }
 
